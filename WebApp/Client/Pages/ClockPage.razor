@@ -1,0 +1,476 @@
+﻿@page "/clock"
+@using WebApp.Shared.Model
+@using Microsoft.AspNetCore.Components.Authorization
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3>Clock In / Out</h3>
+
+<AuthorizeView>
+    <Authorized>
+        @if (!initialized || employees is null)
+        {
+            <p>Loading...</p>
+        }
+        else
+        {
+            @if (isMobile)
+            {
+                <div class="container mt-3" style="max-width:500px;">
+                    <h4 class="mb-3 text-center">Clock In / Out</h4>
+
+                    <div class="mb-3">
+                        <select class="form-select" @onchange="OnDepartmentChanged">
+                            <option value="">-- All departments --</option>
+                            @foreach (var d in departments)
+                            {
+                                <option value="@d.Id">@d.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <select class="form-select" @onchange="OnEmployeeChanged" disabled="@(employees is null || !employees.Any())">
+                            <option value="">-- Select employee --</option>
+                            @if (employees is not null)
+                            {
+                                @foreach (var e in employees)
+                                {
+                                    <option value="@e.Id">@e.Name</option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Category selection (mobile) -->
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="radio"
+                                   id="catNormalMobile"
+                                   value="Normal"
+                                   @onchange="OnCategoryChanged"
+                                   checked="@(selectedCategory == WorkCategory.Normal)" />
+                            <label class="form-check-label" for="catNormalMobile">Normal</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="radio"
+                                   id="catDriverMobile"
+                                   value="Driver"
+                                   @onchange="OnCategoryChanged"
+                                   checked="@(selectedCategory == WorkCategory.Driver)" />
+                            <label class="form-check-label" for="catDriverMobile">Driver</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="radio"
+                                   id="catBreakdownMobile"
+                                   value="Breakdown"
+                                   @onchange="OnCategoryChanged"
+                                   checked="@(selectedCategory == WorkCategory.Breakdown)" />
+                            <label class="form-check-label" for="catBreakdownMobile">Breakdown</label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-success btn-lg w-100 mb-2"
+                            disabled="@(!CanClockIn)"
+                            @onclick="ClockIn">
+                        Clock In
+                    </button>
+
+                    <button class="btn btn-danger btn-lg w-100"
+                            disabled="@(!CanClockOut)"
+                            @onclick="ClockOut">
+                        Clock Out
+                    </button>
+
+                    <!-- Today's segments summary (mobile) -->
+                    @if (todaysSegments.Any())
+                    {
+                        <div class="mt-3">
+                            <h6>Today's segments</h6>
+                            <table class="table table-sm table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>In</th>
+                                        <th>Out</th>
+                                        <th>Category</th>
+                                        <th>Hours</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var s in todaysSegments)
+                                    {
+                                        <tr>
+                                            <td>@s.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
+                                            <td>@(s.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
+                                            <td>@s.WorkCategory</td>
+                                            <td>@(s.HoursWorked?.ToString("0.00") ?? "-")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <p class="mt-3 text-center @(isError ? "text-danger border border-danger rounded p-2" : "text-muted")">@statusMessage</p>
+                </div>
+            }
+            else
+            {
+                <div class="container mt-4">
+                    <div class="row">
+                        <div class="col-md-4">
+
+                            <div class="mb-3">
+                                <label class="form-label">Department</label>
+                                <select class="form-select" @onchange="OnDepartmentChanged">
+                                    <option value="">-- All departments --</option>
+                                    @foreach (var d in departments)
+                                    {
+                                        <option value="@d.Id">@d.Name</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Employee</label>
+                                <select class="form-select" @onchange="OnEmployeeChanged" disabled="@(employees is null || !employees.Any())">
+                                    <option value="">-- Select employee --</option>
+                                    @if (employees is not null)
+                                    {
+                                        @foreach (var e in employees)
+                                        {
+                                            <option value="@e.Id">@e.Name</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+
+                            <!-- Category selection (desktop) -->
+                            <div class="mb-3">
+                                <label class="form-label">Category</label>
+                                <div class="form-check">
+                                    <input class="form-check-input"
+                                           type="radio"
+                                           id="catNormal"
+                                           value="Normal"
+                                           @onchange="OnCategoryChanged"
+                                           checked="@(selectedCategory == WorkCategory.Normal)" />
+                                    <label class="form-check-label" for="catNormal">Normal</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input"
+                                           type="radio"
+                                           id="catDriver"
+                                           value="Driver"
+                                           @onchange="OnCategoryChanged"
+                                           checked="@(selectedCategory == WorkCategory.Driver)" />
+                                    <label class="form-check-label" for="catDriver">Driver</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input"
+                                           type="radio"
+                                           id="catBreakdown"
+                                           value="Breakdown"
+                                           @onchange="OnCategoryChanged"
+                                           checked="@(selectedCategory == WorkCategory.Breakdown)" />
+                                    <label class="form-check-label" for="catBreakdown">Breakdown</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <button class="btn btn-success w-100 mb-2"
+                                        disabled="@(!CanClockIn)"
+                                        @onclick="ClockIn">
+                                    Clock In
+                                </button>
+
+                                <button class="btn btn-danger w-100"
+                                        disabled="@(!CanClockOut)"
+                                        @onclick="ClockOut">
+                                    Clock Out
+                                </button>
+                            </div>
+
+                            <!-- Today's segments summary (desktop) -->
+                            @if (todaysSegments.Any())
+                            {
+                                <div class="mb-3">
+                                    <h6>Today's segments</h6>
+                                    <table class="table table-sm table-bordered">
+                                        <thead>
+                                            <tr>
+                                                <th>In</th>
+                                                <th>Out</th>
+                                                <th>Category</th>
+                                                <th>Hours</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var s in todaysSegments)
+                                            {
+                                                <tr>
+                                                    <td>@s.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
+                                                    <td>@(s.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
+                                                    <td>@s.WorkCategory</td>
+                                                    <td>@(s.HoursWorked?.ToString("0.00") ?? "-")</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+
+                            <p class="@(isError ? "text-danger border border-danger rounded p-2" : "text-muted")">@statusMessage</p>
+                        </div>
+
+                        <div class="col-md-8">
+                            <p>Here you can later show today's records or a map.</p>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </Authorized>
+    <NotAuthorized>
+        <p>You must be logged in to clock in or out.</p>
+        <p>
+            <a href="/login">Go to Login</a>
+        </p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool isMobile;
+    private bool initialized;
+
+    private List<DepartmentItem> departments = new();
+    private int? selectedDepartmentId;
+
+    private List<EmployeeItem>? allEmployees;
+    private List<EmployeeItem>? employees;
+    private int? selectedEmployeeId;
+    private bool isSelectedEmployeeClockedIn;
+    private string statusMessage = "Select an employee.";
+    private bool isError = false;
+
+    private bool CanClockIn => selectedEmployeeId.HasValue && !isSelectedEmployeeClockedIn;
+    private bool CanClockOut => selectedEmployeeId.HasValue && isSelectedEmployeeClockedIn;
+
+    // New: category and today's segments
+    private WorkCategory selectedCategory = WorkCategory.Normal;
+    private List<AttendanceListItemDto> todaysSegments = new();
+    private DateTime today = DateTime.Today;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            isMobile = await JS.InvokeAsync<bool>("isMobileViewport");
+
+            departments = await Http.GetFromJsonAsync<List<DepartmentItem>>("api/departments")
+                          ?? new();
+            departments = departments
+                .OrderBy(d => d.Name)
+                .ToList();
+
+            allEmployees = await Http.GetFromJsonAsync<List<EmployeeItem>>("api/employees")
+                           ?? new();
+
+            allEmployees = allEmployees
+                .Where(e => e.IsActive)
+                .OrderBy(e => e.Name)
+                .ToList();
+
+            selectedDepartmentId = null;
+            employees = allEmployees;
+
+            initialized = true;
+            StateHasChanged();
+        }
+    }
+
+    private void OnDepartmentChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id) && id > 0)
+        {
+            selectedDepartmentId = id;
+        }
+        else
+        {
+            selectedDepartmentId = null; // All
+        }
+
+        selectedEmployeeId = null;
+        isSelectedEmployeeClockedIn = false;
+        isError = false;
+        statusMessage = "Select an employee.";
+        todaysSegments = new();
+
+        if (allEmployees is null)
+        {
+            employees = new();
+            return;
+        }
+
+        if (selectedDepartmentId is null)
+        {
+            employees = allEmployees;
+        }
+        else
+        {
+            employees = allEmployees
+                .Where(e => e.DepartmentId == selectedDepartmentId.Value)
+                .OrderBy(e => e.Name)
+                .ToList();
+        }
+    }
+
+    private async Task OnEmployeeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id))
+        {
+            selectedEmployeeId = id;
+        }
+        else
+        {
+            selectedEmployeeId = null;
+        }
+
+        isError = false;
+
+        if (!selectedEmployeeId.HasValue)
+        {
+            isSelectedEmployeeClockedIn = false;
+            statusMessage = "Select an employee.";
+            todaysSegments = new();
+            return;
+        }
+
+        var result = await Http.GetFromJsonAsync<ClockStatusDto>($"api/attendance/status/{selectedEmployeeId.Value}");
+        isSelectedEmployeeClockedIn = result?.IsClockedIn ?? false;
+        statusMessage = isSelectedEmployeeClockedIn
+            ? $"Currently clocked in since {result!.LastClockInTime:g}"
+            : "Currently clocked out.";
+
+        await LoadTodaySegmentsAsync();
+    }
+
+    private void OnCategoryChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        selectedCategory = value switch
+        {
+            "Driver" => WorkCategory.Driver,
+            "Breakdown" => WorkCategory.Breakdown,
+            _ => WorkCategory.Normal
+        };
+    }
+
+    private async Task ClockIn()
+    {
+        if (!selectedEmployeeId.HasValue) return;
+
+        var loc = await GetLocationAsync();
+
+        var request = new ClockRequestDto
+        {
+            EmployeeId = selectedEmployeeId.Value,
+            Latitude = loc?.Latitude,
+            Longitude = loc?.Longitude,
+            WorkCategory = selectedCategory
+        };
+
+        var response = await Http.PostAsJsonAsync("api/attendance/clockin", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            isError = true;
+            statusMessage = "Already clocked for today. Contact admin to clear if needed.";
+            return;
+        }
+
+        isError = false;
+        isSelectedEmployeeClockedIn = true;
+        statusMessage = "Clocked in.";
+
+        await LoadTodaySegmentsAsync();
+    }
+
+    private async Task ClockOut()
+    {
+        if (!selectedEmployeeId.HasValue) return;
+
+        var loc = await GetLocationAsync();
+
+        var request = new ClockRequestDto
+        {
+            EmployeeId = selectedEmployeeId.Value,
+            Latitude = loc?.Latitude,
+            Longitude = loc?.Longitude,
+            WorkCategory = selectedCategory
+        };
+
+        var response = await Http.PostAsJsonAsync("api/attendance/clockout", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            isError = true;
+            statusMessage = "Clock out failed.";
+            return;
+        }
+
+        isError = false;
+        isSelectedEmployeeClockedIn = false;
+        statusMessage = "Clocked out.";
+
+        await LoadTodaySegmentsAsync();
+    }
+
+    private async Task LoadTodaySegmentsAsync()
+    {
+        if (!selectedEmployeeId.HasValue)
+        {
+            todaysSegments = new();
+            return;
+        }
+
+        var dateParam = today.ToString("yyyy-MM-dd");
+        var result = await Http.GetFromJsonAsync<List<AttendanceListItemDto>>(
+            $"api/attendance/list?date={dateParam}&employeeId={selectedEmployeeId.Value}");
+
+        todaysSegments = result ?? new();
+    }
+
+    private async Task<LocationResult?> GetLocationAsync()
+    {
+        try
+        {
+            return await JS.InvokeAsync<LocationResult>("getCurrentPosition");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public class DepartmentItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class EmployeeItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public int DepartmentId { get; set; }
+    }
+
+    public class LocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+}

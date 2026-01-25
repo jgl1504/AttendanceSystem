@@ -1,0 +1,413 @@
+﻿@page "/leave/request"
+@using WebApp.Shared.Model
+@using Microsoft.AspNetCore.Components.Authorization
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3>Leave Request</h3>
+
+<AuthorizeView>
+    <Authorized>
+        @if (employees is null || departments is null)
+        {
+            <p>Loading data...</p>
+        }
+        else
+        {
+            <div class="row mb-3">
+                <div class="col-md-3 col-12 mb-2">
+                    <label class="form-label">Department</label>
+                    <select class="form-select"
+                            @bind="SelectedDepartmentId">
+                        <option value="">-- All departments --</option>
+                        @foreach (var d in departments)
+                        {
+                            <option value="@d.Id">@d.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-3 col-12 mb-2">
+                    <label class="form-label">Employee</label>
+                    <select class="form-select"
+                            @bind="SelectedEmployeeId">
+                        <option value="">-- Select employee --</option>
+                        @foreach (var e in filteredEmployees)
+                        {
+                            <option value="@e.Id">@e.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-3 col-6 mb-2">
+                    <label class="form-label">Start date</label>
+                    <InputDate @bind-Value="StartDate" class="form-control" />
+                </div>
+
+                <div class="col-md-3 col-6 mb-2">
+                    <label class="form-label">End date</label>
+                    <InputDate @bind-Value="EndDate" class="form-control" />
+                </div>
+
+                <div class="col-md-2 col-6 mb-2">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" @bind="selectedLeaveType">
+                        <option value="Annual">Annual</option>
+                        <option value="Sick">Sick</option>
+                        <option value="FamilyResponsibility">Family Responsibility</option>
+                        <option value="Maternity">Maternity</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2 col-6 mb-2">
+                    <label class="form-label">Portion</label>
+                    <InputSelect @bind-Value="SelectedPortion" class="form-select">
+                        <option value="">-- Select --</option>
+                        <option value="@LeavePortion.FullDay">Full day</option>
+                        <option value="@LeavePortion.HalfDay">Half day</option>
+                    </InputSelect>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Reason (optional)</label>
+                <textarea class="form-control" rows="2" @bind="reason"></textarea>
+            </div>
+
+            @if (calculatedDays > 0)
+            {
+                var effectiveDays = GetEffectiveDays(calculatedDays, SelectedPortion);
+                <p class="text-muted">
+                    This request will use <strong>@effectiveDays</strong> day(s) of leave
+                    (@calculatedDays working day(s), @SelectedPortion).
+                </p>
+            }
+
+            <button class="btn btn-primary" @onclick="Submit" disabled="@isSubmitting">
+                @(isSubmitting ? "Submitting..." : "Submit Leave Request")
+            </button>
+
+            <p class="mt-3 @(isError ? "text-danger" : "text-muted")">@statusMessage</p>
+
+            @if (balance is not null)
+            {
+                <div class="mt-3 alert alert-info">
+                    <div>
+                        Current annual leave balance:
+                        <strong>@balance.DaysBalance</strong> days
+                        (accruing @balance.AccrualRatePerMonth days/month)
+                    </div>
+
+                    @if (calculatedDays > 0)
+                    {
+                        var effectiveDays = GetEffectiveDays(calculatedDays, SelectedPortion);
+                        <div class="mt-1">
+                            This request uses <strong>@effectiveDays</strong> day(s),
+                            remaining after approval would be
+                            <strong>@(balance.DaysBalance - effectiveDays)</strong> day(s).
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (records is not null && records.Any())
+            {
+                var ordered = records
+                .OrderByDescending(r => r.RequestedAt)
+                .ThenByDescending(r => r.Id)
+                .ToList();
+
+                <h5 class="mt-4">Leave history</h5>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Start</th>
+                            <th>End</th>
+                            <th>Days</th>
+                            <th>Portion</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in ordered)
+                        {
+                            <tr>
+                                <td>@r.StartDate.ToString("yyyy-MM-dd")</td>
+                                <td>@r.EndDate.ToString("yyyy-MM-dd")</td>
+                                <td>@r.DaysTaken</td>
+                                <td>@r.Portion</td>
+                                <td>@r.LeaveType</td>
+                                <td>@r.Status</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </Authorized>
+
+    <NotAuthorized>
+        <div class="alert alert-warning mt-3">
+            You must be logged in to request leave. Please log in and try again.
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<EmployeeListItem>? employees;
+    private List<EmployeeListItem> filteredEmployees = new();
+    private List<DepartmentListItem>? departments;
+
+    private int? _selectedEmployeeId;
+    private int? selectedDepartmentId;
+
+    private DateTime startDate = DateTime.Today;
+    private DateTime endDate = DateTime.Today;
+    private string selectedLeaveType = "Annual";
+    private LeavePortion selectedPortion = LeavePortion.FullDay;
+    private string reason = string.Empty;
+
+    private EmployeeLeaveDto? balance;
+    private List<LeaveRecordDto>? records;
+
+    // decimal so Saturdays can count as 0.5
+    private decimal calculatedDays = 0;
+
+    private bool isSubmitting;
+    private bool isError;
+    private string statusMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            departments = await Http.GetFromJsonAsync<List<DepartmentListItem>>("api/departments") ?? new();
+            employees = await Http.GetFromJsonAsync<List<EmployeeListItem>>("api/employees") ?? new();
+            filteredEmployees = employees.ToList();
+        }
+        catch
+        {
+            departments ??= new();
+            employees ??= new();
+            filteredEmployees = employees.ToList();
+            isError = true;
+            statusMessage = "Failed to load data for leave request.";
+        }
+
+        RecalculateDays();
+    }
+
+    private int? SelectedDepartmentId
+    {
+        get => selectedDepartmentId;
+        set
+        {
+            selectedDepartmentId = value;
+            FilterEmployees();
+            _selectedEmployeeId = null;
+            balance = null;
+            records = null;
+            RecalculateDays();
+        }
+    }
+
+    private void FilterEmployees()
+    {
+        if (employees is null)
+        {
+            filteredEmployees = new();
+            return;
+        }
+
+        if (!selectedDepartmentId.HasValue || selectedDepartmentId.Value == 0)
+        {
+            filteredEmployees = employees.ToList();
+        }
+        else
+        {
+            filteredEmployees = employees
+                .Where(e => e.DepartmentId == selectedDepartmentId.Value)
+                .ToList();
+        }
+    }
+
+    private int? SelectedEmployeeId
+    {
+        get => _selectedEmployeeId;
+        set
+        {
+            _selectedEmployeeId = value;
+            _ = LoadEmployeeData();
+            RecalculateDays();
+        }
+    }
+
+    private LeavePortion SelectedPortion
+    {
+        get => selectedPortion;
+        set
+        {
+            selectedPortion = value;
+            RecalculateDays();
+        }
+    }
+
+    private async Task LoadEmployeeData()
+    {
+        if (!_selectedEmployeeId.HasValue)
+        {
+            balance = null;
+            records = null;
+            return;
+        }
+
+        balance = await Http.GetFromJsonAsync<EmployeeLeaveDto>($"api/leave/balance/{_selectedEmployeeId.Value}");
+        records = await Http.GetFromJsonAsync<List<LeaveRecordDto>>($"api/leave/employee/{_selectedEmployeeId.Value}");
+        StateHasChanged();
+    }
+
+    private void RecalculateDays()
+    {
+        calculatedDays = CalculateWorkingDays(startDate, endDate);
+    }
+
+    // Saturdays = 0.5, Sundays ignored, others = 1.0
+    private decimal CalculateWorkingDays(DateTime start, DateTime end)
+    {
+        if (end < start) return 0;
+
+        decimal days = 0;
+        var current = start.Date;
+        var last = end.Date;
+
+        while (current <= last)
+        {
+            if (current.DayOfWeek == DayOfWeek.Saturday)
+            {
+                days += 0.5m;
+            }
+            else if (current.DayOfWeek != DayOfWeek.Sunday)
+            {
+                days += 1m;
+            }
+
+            current = current.AddDays(1);
+        }
+
+        return days;
+    }
+
+    private decimal GetEffectiveDays(decimal workingDays, LeavePortion portion)
+        => portion == LeavePortion.HalfDay ? workingDays * 0.5m : workingDays * 1.0m; 
+
+    private bool IsSundayOnlyRange(DateTime start, DateTime end)
+    {
+        // Single day and that day is Sunday
+        if (start.Date == end.Date && start.DayOfWeek == DayOfWeek.Sunday)
+            return true;
+
+        // Multi-day: check that every day in range is Sunday
+        var current = start.Date;
+        var last = end.Date;
+
+        while (current <= last)
+        {
+            if (current.DayOfWeek != DayOfWeek.Sunday)
+                return false;
+
+            current = current.AddDays(1);
+        }
+
+        return true;
+    }
+
+    private async Task Submit()
+    {
+        isError = false;
+        statusMessage = string.Empty;
+
+        if (!_selectedEmployeeId.HasValue)
+        {
+            isError = true;
+            statusMessage = "Select an employee.";
+            return;
+        }
+
+        if (endDate < startDate)
+        {
+            isError = true;
+            statusMessage = "End date cannot be before start date.";
+            return;
+        }
+
+        // Block Sunday-only leave and show popup
+        if (IsSundayOnlyRange(startDate, endDate))
+        {
+            await JS.InvokeVoidAsync("showInfo", "You selected only Sunday. This is a non-working day and cannot be requested as leave.");
+            return;
+        }
+
+        isSubmitting = true;
+
+        var dto = new RequestLeaveDto
+        {
+            EmployeeId = _selectedEmployeeId.Value,
+            StartDate = startDate,
+            EndDate = endDate,
+            LeaveType = Enum.Parse<LeaveType>(selectedLeaveType),
+            Reason = reason,
+            Portion = SelectedPortion
+        };
+
+        var response = await Http.PostAsJsonAsync("api/leave/request", dto);
+
+        isSubmitting = false;
+
+        if (!response.IsSuccessStatusCode)
+        {
+            isError = true;
+            statusMessage = "Failed to submit leave request. Check balance or dates.";
+            return;
+        }
+
+        statusMessage = "Leave request submitted.";
+
+        await LoadEmployeeData();
+        RecalculateDays();
+    }
+
+    public class EmployeeListItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int DepartmentId { get; set; }
+    }
+
+    public class DepartmentListItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private DateTime StartDate
+    {
+        get => startDate;
+        set
+        {
+            startDate = value;
+            RecalculateDays();
+        }
+    }
+
+    private DateTime EndDate
+    {
+        get => endDate;
+        set
+        {
+            endDate = value;
+            RecalculateDays();
+        }
+    }
+}

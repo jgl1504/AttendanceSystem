@@ -1,0 +1,100 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">Attendance System</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        <!-- Admin section - only for Admin role -->
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <!-- Attendance group -->
+                <div class="mt-2 mb-1 px-3 text-uppercase small fw-bold text-secondary">
+                    Attendance
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/employees">
+                        <span class="oi oi-people" aria-hidden="true"></span> Admin - Employees
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/departments">
+                        <span class="oi oi-briefcase" aria-hidden="true"></span> Admin - Departments
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/attendance">
+                        <span class="oi oi-clock" aria-hidden="true"></span> Admin - Attendance
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/attendance/quick-entry">
+                        <span class="oi oi-plus" aria-hidden="true"></span> Admin - Quick Entry
+                    </NavLink>
+                </div>
+
+                <!-- Leave group -->
+                <div class="mt-3 mb-1 px-3 text-uppercase small fw-bold text-secondary">
+                    Leave
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/leave">
+                        <span class="oi oi-calendar" aria-hidden="true"></span> Admin - Leave
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/leave/setup">
+                        <span class="oi oi-cog" aria-hidden="true"></span> Admin - Leave Setup
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        <!-- Employee / user section -->
+        <div class="mt-3 mb-1 px-3 text-uppercase small fw-bold text-secondary">
+            Employee
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="clock">
+                <span class="oi oi-clock" aria-hidden="true"></span> Clock In/Out
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="leave/request">
+                <span class="oi oi-envelope-closed" aria-hidden="true"></span> Leave Request
+            </NavLink>
+        </div>
+
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

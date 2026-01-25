@@ -1,0 +1,94 @@
+﻿@page "/login"
+@using WebApp.Client.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using System.ComponentModel.DataAnnotations
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject ClientAuthService Auth
+@inject NavigationManager Nav
+
+<h3>Login</h3>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (!string.IsNullOrEmpty(successMessage))
+{
+    <div class="alert alert-success">@successMessage</div>
+}
+
+<EditForm Model="model" OnSubmit="HandleLogin">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <InputText class="form-control" @bind-Value="model.Email" />
+        <ValidationMessage For="@(() => model.Email)" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Password</label>
+        <InputText class="form-control" type="password" @bind-Value="model.Password" />
+        <ValidationMessage For="@(() => model.Password)" />
+    </div>
+
+    <button class="btn btn-primary" type="submit" disabled="@isBusy">
+        @(isBusy ? "Signing in..." : "Login")
+    </button>
+
+
+</EditForm>
+
+@code {
+    private LoginModel model = new();
+    private string? error;
+    private string? successMessage;
+    private bool isBusy;
+
+    public class LoginModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    private async Task HandleLogin()
+    {
+        error = null;
+        successMessage = null;
+        isBusy = true;
+
+        try
+        {
+            var result = await Auth.Login(model.Email, model.Password);
+            isBusy = false;
+
+            if (result is null)
+            {
+                error = "No response from server.";
+                return;
+            }
+
+            if (!result.Success)
+            {
+                error = result.Message ?? "Login failed.";
+                return;
+            }
+
+            // Optional short success message
+            // successMessage = $"Login successful for {model.Email}";
+
+            // Go to the clock page once logged in
+            Nav.NavigateTo("/clock", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            isBusy = false;
+            error = $"Login error: {ex.Message}";
+        }
+    }
+}

@@ -1,0 +1,288 @@
+﻿@page "/admin/attendance/quick-entry"
+@using WebApp.Shared.Model
+@inject HttpClient Http
+
+<h3>Quick Attendance Entry</h3>
+<p class="text-muted">Backdate attendance records for past dates only. Use the Clock page for today.</p>
+
+<div class="row mb-3">
+    <div class="col-md-2 col-6 mb-2">
+        <label class="form-label">Date</label>
+        <InputDate @bind-Value="selectedDate" class="form-control" max="@DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd")" />
+    </div>
+    <div class="col-md-3 col-6 mb-2">
+        <label class="form-label">Search Employee</label>
+        <input type="text" class="form-control" @bind="nameFilter" @bind:event="oninput" placeholder="Type to search..." />
+    </div>
+    <div class="col-md-3 col-6 mb-2">
+        <label class="form-label">Department</label>
+        <select class="form-select" @bind="departmentFilter">
+            <option value="">All Departments</option>
+            @foreach (var dept in departments)
+            {
+                <option value="@dept">@dept</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-2 col-6 mb-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100" @onclick="LoadData">Reload</button>
+    </div>
+    <div class="col-md-2 col-6 mb-2 d-flex align-items-end">
+        <button class="btn btn-outline-secondary w-100" @onclick="SetDefaults">Set Defaults</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert @(message.Contains("✓") ? "alert-success" : message.Contains("Cannot") || message.Contains("only") ? "alert-warning" : "alert-info") mt-3">
+        @message
+    </div>
+}
+
+@if (rows == null)
+{
+    <p>Loading...</p>
+}
+else if (rows.Count == 0)
+{
+    <p>Select a past date to begin.</p>
+}
+else if (!filteredRows.Any())
+{
+    <p>No employees match the filter.</p>
+}
+else
+{
+    <div class="mb-3 d-flex align-items-center">
+        <button class="btn btn-success" @onclick="SaveAll">Save All Changes</button>
+        <span class="ms-3">
+            <strong>@filteredRows.Count</strong> employee(s) shown
+            @if (changedCount > 0)
+            {
+                <span class="text-warning ms-2">• <strong>@changedCount</strong> with changes</span>
+            }
+        </span>
+    </div>
+
+    <table class="table table-sm table-striped">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Department</th>
+                <th>Clock In (HH:mm)</th>
+                <th>Clock Out (HH:mm)</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in filteredRows)
+            {
+                <tr style="@(row.HasChanges ? "background-color: #fff9e6;" : "")">
+                    <td>@row.EmployeeName</td>
+                    <td><span class="badge bg-secondary">@row.DepartmentName</span></td>
+                    <td>
+                        <input type="text"
+                               class="form-control form-control-sm"
+                               style="width:90px;"
+                               @bind="row.ClockInTimeText"
+                               @bind:event="oninput"
+                               placeholder="08:00" />
+                    </td>
+                    <td>
+                        <input type="text"
+                               class="form-control form-control-sm"
+                               style="width:90px;"
+                               @bind="row.ClockOutTimeText"
+                               @bind:event="oninput"
+                               placeholder="17:00" />
+                    </td>
+                    <td>
+                        @if (row.AttendanceId.HasValue && !row.HasChanges)
+                        {
+                            <span class="badge bg-success">Saved</span>
+                        }
+                        else if (row.AttendanceId.HasValue && row.HasChanges)
+                        {
+                            <span class="badge bg-warning text-dark">Modified</span>
+                        }
+                        else if (row.HasChanges)
+                        {
+                            <span class="badge bg-info">New</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">Empty</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<QuickEntryRow>? rows;
+    private DateTime selectedDate = DateTime.Today.AddDays(-1);
+    private string nameFilter = "";
+    private string departmentFilter = "";
+    private List<string> departments = new();
+    private string message = "";
+
+    private List<QuickEntryRow> filteredRows
+    {
+        get
+        {
+            if (rows == null) return new();
+
+            return rows.Where(r =>
+                (string.IsNullOrWhiteSpace(nameFilter) || r.EmployeeName.Contains(nameFilter, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(departmentFilter) || r.DepartmentName == departmentFilter)
+            ).ToList();
+        }
+    }
+
+    private int changedCount => filteredRows.Count(r => r.HasChanges);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        message = "";
+
+        if (selectedDate.Date >= DateTime.Today)
+        {
+            message = "Quick Entry can only be used for past dates. Use the Clock page for today.";
+            rows = new List<QuickEntryRow>();
+            return;
+        }
+
+        var dateString = selectedDate.ToString("yyyy-MM-dd");
+        var data = await Http.GetFromJsonAsync<List<QuickEntryRowDto>>($"api/attendance/quick-entry-data?date={dateString}");
+
+        if (data == null)
+        {
+            rows = new List<QuickEntryRow>();
+            return;
+        }
+
+        rows = data.Select(d => new QuickEntryRow
+        {
+            EmployeeId = d.EmployeeId,
+            EmployeeName = d.EmployeeName,
+            DepartmentName = d.DepartmentName,
+            AttendanceId = d.AttendanceId,
+            ClockInTimeText = d.ClockInTime?.ToLocalTime().ToString("HH:mm") ?? "",
+            ClockOutTimeText = d.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "",
+            DefaultClockIn = d.DefaultClockIn,
+            DefaultClockOut = d.DefaultClockOut,
+            OriginalClockIn = d.ClockInTime?.ToLocalTime().ToString("HH:mm") ?? "",
+            OriginalClockOut = d.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? ""
+        }).ToList();
+
+        departments = rows.Select(r => r.DepartmentName)
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
+    }
+
+    private void SetDefaults()
+    {
+        if (selectedDate.Date >= DateTime.Today)
+        {
+            message = "Cannot set defaults for today or future dates. Use the Clock page.";
+            return;
+        }
+
+        var count = 0;
+
+        foreach (var row in filteredRows)
+        {
+            if (string.IsNullOrWhiteSpace(row.ClockInTimeText) && !string.IsNullOrWhiteSpace(row.DefaultClockIn))
+            {
+                row.ClockInTimeText = row.DefaultClockIn;
+                row.ClockOutTimeText = row.DefaultClockOut;
+                count++;
+            }
+        }
+
+        var filterDesc = "";
+        if (!string.IsNullOrWhiteSpace(departmentFilter))
+            filterDesc = $" in {departmentFilter}";
+        if (!string.IsNullOrWhiteSpace(nameFilter))
+            filterDesc += $" matching '{nameFilter}'";
+
+        message = count > 0
+            ? $"Applied defaults to {count} employee(s){filterDesc}."
+            : $"No empty records to fill{filterDesc}.";
+    }
+
+    private async Task SaveAll()
+    {
+        if (selectedDate.Date >= DateTime.Today)
+        {
+            message = "Cannot save attendance for today or future dates. Use the Clock page.";
+            return;
+        }
+
+        message = "";
+
+        var batch = new SaveQuickEntryBatchDto
+        {
+            Date = selectedDate,
+            Entries = filteredRows
+                .Where(r => r.HasChanges && !string.IsNullOrWhiteSpace(r.ClockInTimeText))
+                .Select(r => new SaveQuickEntryDto
+                {
+                    EmployeeId = r.EmployeeId,
+                    Date = selectedDate,
+                    ClockInTime = r.ClockInTimeText,
+                    ClockOutTime = r.ClockOutTimeText
+                })
+                .ToList()
+        };
+
+        if (!batch.Entries.Any())
+        {
+            message = "No changes to save in the current view.";
+            return;
+        }
+
+        var response = await Http.PostAsJsonAsync("api/attendance/save-quick-entry-batch", batch);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            message = $"Failed to save: {errorContent}";
+            return;
+        }
+
+        var filterDesc = "";
+        if (!string.IsNullOrWhiteSpace(departmentFilter))
+            filterDesc = $" in {departmentFilter}";
+        if (!string.IsNullOrWhiteSpace(nameFilter))
+            filterDesc += $" matching '{nameFilter}'";
+
+        message = $"✓ Saved {batch.Entries.Count} record(s){filterDesc}.";
+        await LoadData();
+    }
+
+    public class QuickEntryRow
+    {
+        public int EmployeeId { get; set; }
+        public string EmployeeName { get; set; } = "";
+        public string DepartmentName { get; set; } = "";
+        public int? AttendanceId { get; set; }
+        public string ClockInTimeText { get; set; } = "";
+        public string ClockOutTimeText { get; set; } = "";
+        public string DefaultClockIn { get; set; } = "";
+        public string DefaultClockOut { get; set; } = "";
+        public string OriginalClockIn { get; set; } = "";
+        public string OriginalClockOut { get; set; } = "";
+
+        public bool HasChanges =>
+            ClockInTimeText != OriginalClockIn || ClockOutTimeText != OriginalClockOut;
+    }
+}

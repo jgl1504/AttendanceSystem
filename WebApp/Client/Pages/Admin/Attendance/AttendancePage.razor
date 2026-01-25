@@ -1,0 +1,515 @@
+﻿@page "/admin/attendance"
+@using WebApp.Shared.Model
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3>Attendance</h3>
+
+<div class="row mb-3">
+    <div class="col-md-3 col-6 mb-2">
+        <label class="form-label">Date</label>
+        <InputDate @bind-Value="selectedDate" class="form-control" />
+    </div>
+    <div class="col-md-4 col-6 mb-2">
+        <label class="form-label">Employee</label>
+        <select class="form-select" @bind="selectedEmployeeId">
+            <option value="0">All employees</option>
+            @foreach (var e in employees)
+            {
+                <option value="@e.Id">@e.Name</option>
+            }
+        </select>
+        @if (selectedEmployeeId > 0 && selectedDate.Date == DateTime.Today)
+        {
+            <button class="btn btn-sm btn-outline-danger mt-2" @onclick="ClearTodayRecord">
+                Clear Today's Record
+            </button>
+        }
+    </div>
+    <div class="col-md-2 col-6 mb-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100" @onclick="LoadRecords">Load</button>
+    </div>
+
+    <div class="col-md-3 col-6 mb-2">
+        <label class="form-label">Approve/Deny as</label>
+        <select class="form-select" @bind="selectedApproverId">
+            <option value="0">Select approver</option>
+            @foreach (var a in approvers)
+            {
+                <option value="@a.Id">@a.Name</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (records is null)
+{
+    <p>Loading...</p>
+}
+else if (!records.Any())
+{
+    <p>No records for the selected filters.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Category</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Hours</th>
+                <th>Expected</th>
+                <th>Weekday OT</th>
+                <th>Sun/Holiday OT</th>
+                <th>OT Status</th>
+                <th>OT Location</th>
+                <th>OT Note</th>
+                <th>Approved By</th>
+                <th>Clock In Location</th>
+                <th>Clock Out Location</th>
+                <th>Edit</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in records)
+            {
+                <tr>
+                    <td>@r.EmployeeName</td>
+                    <td>@r.WorkCategory</td>
+                    <td>@r.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
+                    <td>@(r.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
+                    <td>@(r.HoursWorked?.ToString("0.00") ?? "-")</td>
+                    <td>@(r.ExpectedHours?.ToString("0.00") ?? "-")</td>
+                    <td>@(r.WeekdayOvertimeHours?.ToString("0.00") ?? "-")</td>
+                    <td>@(r.SundayPublicOvertimeHours?.ToString("0.00") ?? "-")</td>
+                    <td>
+                        @if (r.OvertimeHours.HasValue && r.OvertimeHours.Value > 0)
+                        {
+                            <span>
+                                @(
+                                                    r.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
+                                                    r.OvertimeStatus == OvertimeStatus.Denied ? "Denied" :
+                                                    "Pending"
+                                                    )
+                        </span>
+
+                @if (r.OvertimeStatus == OvertimeStatus.Pending)
+                            {
+                                <button class="btn btn-sm btn-outline-success ms-2"
+                                        @onclick="() => ApproveOvertime(r)">
+                                    Approve
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger ms-1"
+                                        @onclick="() => DenyOvertime(r)">
+                                    Deny
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-secondary ms-2"
+                                        @onclick="() => ResetOvertime(r)">
+                                    Reopen
+                                </button>
+                            }
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </td>
+                    <td>
+                        <InputText @bind-Value="r.OvertimeLocation"
+                                   class="form-control form-control-sm"
+                                   placeholder="e.g. Dischem" />
+                    </td>
+                    <td>
+                        <InputText @bind-Value="r.OvertimeNote"
+                                   class="form-control form-control-sm"
+                                   placeholder="Note / reason" />
+                    </td>
+                    <td>@(string.IsNullOrWhiteSpace(r.OvertimeApprovedByName) ? "-" : r.OvertimeApprovedByName)</td>
+                    <td>
+                        @if (r.ClockInLatitude.HasValue && r.ClockInLongitude.HasValue)
+                        {
+                            <a href="@GetInMapUrl(r)" target="_blank">View on map</a>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </td>
+                    <td>
+                        @if (r.ClockOutLatitude.HasValue && r.ClockOutLongitude.HasValue)
+                        {
+                            <a href="@GetOutMapUrl(r)" target="_blank">View on map</a>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary me-1"
+                                @onclick="() => StartEdit(r)">
+                            Edit
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger"
+                                @onclick="() => DeleteRecord(r)">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (editing is not null)
+{
+    <hr />
+    <div id="attendance-edit-form">
+        <h5>Edit Times for @editing.EmployeeName</h5>
+
+        <p>
+            Overtime status:
+            @(
+                    editing.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
+                    editing.OvertimeStatus == OvertimeStatus.Denied ? "Denied" :
+                    "Pending"
+                    )
+    </p>
+
+        <div class="mb-2">
+        @if (editing.OvertimeStatus == OvertimeStatus.Pending)
+            {
+                <button class="btn btn-sm btn-outline-success me-2"
+                        @onclick="() => ApproveOvertime(editing)">
+                    Approve Overtime
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        @onclick="() => DenyOvertime(editing)">
+                    Deny Overtime
+                </button>
+            }
+            else
+            {
+                <button class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => ResetOvertime(editing)">
+                    Reopen Overtime
+                </button>
+            }
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-3 col-6">
+                <label class="form-label">Clock In Date</label>
+                <InputDate @bind-Value="clockInDate" class="form-control" />
+            </div>
+            <div class="col-md-3 col-6">
+                <label class="form-label">Clock In Time</label>
+                <InputText @bind-Value="clockInTimeText" class="form-control" placeholder="HH:mm" />
+            </div>
+
+            <div class="col-md-3 col-6">
+                <label class="form-label">Clock Out Date</label>
+                <InputDate @bind-Value="clockOutDate" class="form-control" />
+            </div>
+            <div class="col-md-3 col-6">
+                <label class="form-label">Clock Out Time</label>
+                <InputText @bind-Value="clockOutTimeText" class="form-control" placeholder="HH:mm" />
+            </div>
+        </div>
+
+        <!-- New: category selector in edit panel -->
+        <div class="row g-3 mb-3">
+            <div class="col-md-3 col-6">
+                <label class="form-label">Category</label>
+                <InputSelect @bind-Value="editModel.WorkCategory" class="form-select">
+                    <option value="@WorkCategory.Normal">Normal</option>
+                    <option value="@WorkCategory.Driver">Driver</option>
+                    <option value="@WorkCategory.Breakdown">Breakdown</option>
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 d-flex align-items-center mt-2">
+                <button class="btn btn-success me-2" @onclick="SaveEdit">Save</button>
+                <button class="btn btn-secondary me-2" @onclick="CancelEdit">Cancel</button>
+                <span class="text-danger">@editError</span>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<AttendanceListItemDto>? records;
+    private List<EmployeeListItem> employees = new();
+    private List<EmployeeListItem> approvers = new();
+    private DateTime selectedDate = DateTime.Today;
+    private int selectedEmployeeId = 0; // 0 = all
+
+    private int selectedApproverId = 0; // selected approver for decisions
+
+    private AttendanceListItemDto? editing;
+    private AttendanceEditDto editModel = new();
+
+    private DateTime clockInDate;
+    private string clockInTimeText = "";
+    private DateTime? clockOutDate;
+    private string? clockOutTimeText = "";
+    private string? editError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        employees = await Http.GetFromJsonAsync<List<EmployeeListItem>>("api/employees") ?? new();
+
+        // For now, allow any employee as approver; later you can filter to Role == "Admin"
+        approvers = employees;
+
+        await LoadRecords();
+    }
+
+    private async Task LoadRecords()
+    {
+        var dateString = selectedDate.ToString("yyyy-MM-dd");
+        var url = $"api/attendance/list?date={dateString}";
+
+        if (selectedEmployeeId > 0)
+        {
+            url += $"&employeeId={selectedEmployeeId}";
+        }
+
+        records = await Http.GetFromJsonAsync<List<AttendanceListItemDto>>(url) ?? new();
+        editing = null;
+        editError = null;
+    }
+
+    private static string GetInMapUrl(AttendanceListItemDto r)
+        => $"https://www.google.com/maps?q={r.ClockInLatitude},{r.ClockInLongitude}";
+
+    private static string GetOutMapUrl(AttendanceListItemDto r)
+        => $"https://www.google.com/maps?q={r.ClockOutLatitude},{r.ClockOutLongitude}";
+
+    private async Task StartEdit(AttendanceListItemDto r)
+    {
+        editing = r;
+        editModel = new AttendanceEditDto
+        {
+            Id = r.Id,
+            ClockInTime = r.ClockInTime,
+            ClockOutTime = r.ClockOutTime,
+            WorkCategory = r.WorkCategory
+        };
+
+        clockInDate = r.ClockInTime.ToLocalTime().Date;
+        clockInTimeText = r.ClockInTime.ToLocalTime().ToString("HH:mm");
+
+        if (r.ClockOutTime.HasValue)
+        {
+            var localOut = r.ClockOutTime.Value.ToLocalTime();
+            clockOutDate = localOut.Date;
+            clockOutTimeText = localOut.ToString("HH:mm");
+        }
+        else
+        {
+            clockOutDate = null;
+            clockOutTimeText = "";
+        }
+
+        editError = null;
+    }
+
+    private void CancelEdit()
+    {
+        editing = null;
+        editError = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        editError = null;
+
+        if (!TimeSpan.TryParse(clockInTimeText, out var inTime))
+        {
+            editError = "Invalid clock in time (use HH:mm).";
+            return;
+        }
+
+        var newClockIn = clockInDate.Date + inTime;
+
+        DateTime? newClockOut = null;
+        if (!string.IsNullOrWhiteSpace(clockOutTimeText) && clockOutDate.HasValue)
+        {
+            if (!TimeSpan.TryParse(clockOutTimeText, out var outTime))
+            {
+                editError = "Invalid clock out time (use HH:mm).";
+                return;
+            }
+
+            newClockOut = clockOutDate.Value.Date + outTime;
+        }
+
+        editModel.ClockInTime = newClockIn.ToUniversalTime();
+        editModel.ClockOutTime = newClockOut?.ToUniversalTime();
+
+        var response = await Http.PutAsJsonAsync("api/attendance/update-times", editModel);
+        if (!response.IsSuccessStatusCode)
+        {
+            editError = "Failed to save changes.";
+            return;
+        }
+
+        var row = records!.First(x => x.Id == editModel.Id);
+        row.ClockInTime = editModel.ClockInTime;
+        row.ClockOutTime = editModel.ClockOutTime;
+        row.WorkCategory = editModel.WorkCategory;
+
+        editing = null;
+    }
+
+    private async Task DeleteRecord(AttendanceListItemDto r)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Delete record for {r.EmployeeName}?");
+        if (!confirmed)
+            return;
+
+        var response = await Http.DeleteAsync($"api/attendance/{r.Id}");
+        if (!response.IsSuccessStatusCode)
+            return;
+
+        records!.Remove(r);
+        if (editing?.Id == r.Id)
+        {
+            editing = null;
+            editError = null;
+        }
+    }
+
+    private async Task ApproveOvertime(AttendanceListItemDto r)
+    {
+        if (selectedApproverId <= 0)
+        {
+            await JS.InvokeVoidAsync("alert", "Select an approver first.");
+            return;
+        }
+
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Approve {r.OvertimeHours:0.00} overtime hours for {r.EmployeeName} as {GetApproverName()}?");
+        if (!confirm)
+            return;
+
+        var dto = new
+        {
+            Id = r.Id,
+            OvertimeStatus = OvertimeStatus.Approved,
+            OvertimeLocation = r.OvertimeLocation,
+            OvertimeNote = r.OvertimeNote,
+            OvertimeApprovedByEmployeeId = selectedApproverId
+        };
+
+        var response = await Http.PostAsJsonAsync("api/attendance/overtime-decision", dto);
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to approve overtime.");
+            return;
+        }
+
+        r.OvertimeStatus = OvertimeStatus.Approved;
+        await LoadRecords();
+    }
+
+    private async Task DenyOvertime(AttendanceListItemDto r)
+    {
+        if (selectedApproverId <= 0)
+        {
+            await JS.InvokeVoidAsync("alert", "Select an approver first.");
+            return;
+        }
+
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Deny overtime for {r.EmployeeName}? Hours will be treated as normal time. Approver: {GetApproverName()}.");
+        if (!confirm)
+            return;
+
+        var dto = new
+        {
+            Id = r.Id,
+            OvertimeStatus = OvertimeStatus.Denied,
+            OvertimeLocation = r.OvertimeLocation,
+            OvertimeNote = r.OvertimeNote,
+            OvertimeApprovedByEmployeeId = selectedApproverId
+        };
+
+        var response = await Http.PostAsJsonAsync("api/attendance/overtime-decision", dto);
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to deny overtime.");
+            return;
+        }
+
+        r.OvertimeStatus = OvertimeStatus.Denied;
+        await LoadRecords();
+    }
+
+    private async Task ResetOvertime(AttendanceListItemDto r)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Reopen overtime decision for {r.EmployeeName}?");
+        if (!confirm)
+            return;
+
+        var dto = new
+        {
+            Id = r.Id,
+            OvertimeStatus = OvertimeStatus.Pending,
+            OvertimeLocation = r.OvertimeLocation,
+            OvertimeNote = r.OvertimeNote,
+            OvertimeApprovedByEmployeeId = (int?)null
+        };
+
+        var response = await Http.PostAsJsonAsync("api/attendance/overtime-decision", dto);
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to reopen overtime.");
+            return;
+        }
+
+        r.OvertimeStatus = OvertimeStatus.Pending;
+        await LoadRecords();
+    }
+
+    private string GetApproverName()
+    {
+        return approvers.FirstOrDefault(a => a.Id == selectedApproverId)?.Name ?? "Unknown";
+    }
+
+    public class EmployeeListItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private async Task ClearTodayRecord()
+    {
+        if (selectedEmployeeId == 0) return;
+
+        var employeeName = employees.FirstOrDefault(e => e.Id == selectedEmployeeId)?.Name ?? "this employee";
+        var confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"Clear all of today's clock records for {employeeName}? This cannot be undone.");
+
+        if (!confirmed) return;
+
+        var response = await Http.DeleteAsync($"api/attendance/clear-today/{selectedEmployeeId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to clear record.");
+            return;
+        }
+
+        await JS.InvokeVoidAsync("alert", "Today's record cleared. Employee can now clock in fresh.");
+        await LoadRecords();
+    }
+}

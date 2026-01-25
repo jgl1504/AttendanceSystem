@@ -1,0 +1,12 @@
+﻿@inherits ComponentBase
+
+<div class="progress">
+    <div class="progress-bar" role="progressbar" style="width: @progressWidth%;" aria-valuenow="@progress" aria-valuemin="0" aria-valuemax="100">@progressWidth.ToString("0.00")%</div>
+</div>
+
+@code {
+    [Parameter]
+    public double progress { get; set; }
+
+    private double progressWidth => progress * 100;
+}

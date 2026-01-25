@@ -1,0 +1,96 @@
+﻿@page "/admin/leave"
+@using WebApp.Shared.Model
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3>Leave Administration</h3>
+
+@if (pending is null)
+{
+    <p>Loading pending requests...</p>
+}
+else if (!pending.Any())
+{
+    <p class="text-muted">No pending leave requests.</p>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Days</th>
+                <th>Portion</th>
+                <th>Type</th>
+                <th>Requested</th>
+                <th>Reason</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in pending)
+            {
+                <tr>
+                    <td>@r.EmployeeName</td>
+                    <td>@r.StartDate.ToString("yyyy-MM-dd")</td>
+                    <td>@r.EndDate.ToString("yyyy-MM-dd")</td>
+                    <td>@r.DaysTaken</td>
+                    <td>@r.Portion</td>
+                    <td>@r.LeaveType</td>
+                    <td>@r.RequestedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@r.Reason</td>
+                    <td>
+                        <button class="btn btn-sm btn-success me-1" @onclick="() => Approve(r.Id)">Approve</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Reject(r.Id)">Reject</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<LeaveRecordDto> pending;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPending();
+    }
+
+    private async Task LoadPending()
+    {
+        pending = await Http.GetFromJsonAsync<List<LeaveRecordDto>>("api/leave/pending");
+    }
+
+    private async Task Approve(int id)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Approve this leave request?");
+        if (!ok) return;
+
+        var response = await Http.PostAsync($"api/leave/approve/{id}", null);
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to approve.");
+            return;
+        }
+
+        await LoadPending();
+    }
+
+    private async Task Reject(int id)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", "Reject this leave request?");
+        if (!ok) return;
+
+        var response = await Http.PostAsync($"api/leave/reject/{id}", null);
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to reject.");
+            return;
+        }
+
+        await LoadPending();
+    }
+}

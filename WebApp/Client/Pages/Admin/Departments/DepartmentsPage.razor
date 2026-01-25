@@ -1,0 +1,309 @@
+﻿@page "/admin/departments"
+@* @attribute [Authorize(Roles = "Admin")] *@
+@using WebApp.Shared.Model
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3>Departments</h3>
+
+@if (departments is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Break</th>
+                <th>Req. hrs/week</th>
+                <th>Sat / Rot</th>
+                <th>Sat hrs</th>
+                <th>Sun?</th>
+                <th>Sun hrs</th>
+                <th>Grace (Before/After)</th>
+                <th>Overtime</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var d in departments)
+            {
+                <tr>
+                    <td>@d.Name</td>
+                    <td>@d.DailyStartTime</td>
+                    <td>@d.DailyEndTime</td>
+                    <td>@d.BreakPerDay</td>
+                    <td>@d.RequiredHoursPerWeek</td>
+                    <td>@(d.WorksSaturday ? "Yes" : "No") / @(d.RotatingWeekends ? "Yes" : "No")</td>
+                    <td>@d.SaturdayHours</td>
+                    <td>@(d.WorksSunday ? "Yes" : "No")</td>
+                    <td>@d.SundayHours</td>
+                    <td>@d.GraceMinutesBefore / @d.GraceMinutesAfter</td>
+                    <td>@(d.AllowOvertime ? "Yes" : "No")</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary me-1" @onclick="() => Edit(d)">Edit</button>
+                        <button class="btn btn-sm btn-secondary me-1" @onclick="() => CopyFrom(d)">Copy</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => Delete(d.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h4>@(editDepartment.Id == 0 ? "Add Department" : "Edit Department")</h4>
+
+<EditForm Model="editDepartment" OnValidSubmit="Save">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-2">
+        <label>Name</label>
+        <InputText class="form-control" @bind-Value="editDepartment.Name" />
+        <ValidationMessage For="@(() => editDepartment.Name)" />
+    </div>
+
+    <div class="mb-2">
+        <label>Required hours per week</label>
+        <InputNumber class="form-control" @bind-Value="editDepartment.RequiredHoursPerWeek" />
+        <ValidationMessage For="@(() => editDepartment.RequiredHoursPerWeek)" />
+    </div>
+
+    <div class="mb-2">
+        <label>Daily start time (HH:mm)</label>
+        <InputText class="form-control" @bind-Value="editDepartment.DailyStartTime" />
+        <ValidationMessage For="@(() => editDepartment.DailyStartTime)" />
+    </div>
+
+    <div class="mb-2">
+        <label>Daily end time (HH:mm)</label>
+        <InputText class="form-control" @bind-Value="editDepartment.DailyEndTime" />
+        <ValidationMessage For="@(() => editDepartment.DailyEndTime)" />
+    </div>
+
+    <div class="mb-2">
+        <label>Break per day (HH:mm)</label>
+        <InputText class="form-control" @bind-Value="editDepartment.BreakPerDay" />
+        <ValidationMessage For="@(() => editDepartment.BreakPerDay)" />
+    </div>
+
+    <div class="mb-2">
+        <label>Works Saturday</label>
+        <InputCheckbox class="form-check-input" @bind-Value="editDepartment.WorksSaturday" />
+    </div>
+
+    <div class="mb-2">
+        <label>Rotating weekends (one off)</label>
+        <InputCheckbox class="form-check-input" @bind-Value="editDepartment.RotatingWeekends" />
+    </div>
+
+    <div class="mb-2">
+        <label>Saturdays per month required</label>
+        <InputNumber class="form-control" @bind-Value="editDepartment.SaturdaysPerMonthRequired" />
+    </div>
+
+    <div class="mb-2">
+        <label>Saturday hours when scheduled</label>
+        <InputNumber class="form-control" @bind-Value="editDepartment.SaturdayHours" />
+    </div>
+
+    <div class="mb-2">
+        <label>Works Sunday</label>
+        <InputCheckbox class="form-check-input" @bind-Value="editDepartment.WorksSunday" />
+    </div>
+
+    <div class="mb-2">
+        <label>Sunday hours when scheduled</label>
+        <InputNumber class="form-control" @bind-Value="editDepartment.SundayHours" />
+    </div>
+
+    <div class="mb-2">
+        <label>Grace minutes before</label>
+        <InputNumber class="form-control" @bind-Value="editDepartment.GraceMinutesBefore" />
+    </div>
+
+    <div class="mb-2">
+        <label>Grace minutes after</label>
+        <InputNumber class="form-control" @bind-Value="editDepartment.GraceMinutesAfter" />
+    </div>
+
+    <div class="mb-2">
+        <label>Allow overtime</label>
+        <InputCheckbox class="form-check-input" @bind-Value="editDepartment.AllowOvertime" />
+    </div>
+
+    <button type="submit" class="btn btn-success">
+        @(editDepartment.Id == 0 ? "Save" : "Update")
+    </button>
+    <button type="button" class="btn btn-secondary ms-2" @onclick="Reset">Cancel</button>
+</EditForm>
+
+@code {
+    private List<DepartmentDto>? departments;
+    private DepartmentDto editDepartment = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        departments = await Http.GetFromJsonAsync<List<DepartmentDto>>("api/departments") ?? new();
+    }
+
+    private void Edit(DepartmentDto d)
+    {
+        editDepartment = new DepartmentDto
+        {
+            Id = d.Id,
+            Name = d.Name,
+            RequiredHoursPerWeek = d.RequiredHoursPerWeek,
+            DailyStartTime = d.DailyStartTime,
+            DailyEndTime = d.DailyEndTime,
+            BreakPerDay = d.BreakPerDay,
+            WorksSaturday = d.WorksSaturday,
+            RotatingWeekends = d.RotatingWeekends,
+            SaturdaysPerMonthRequired = d.SaturdaysPerMonthRequired,
+            SaturdayHours = d.SaturdayHours,
+            WorksSunday = d.WorksSunday,
+            SundayHours = d.SundayHours,
+            GraceMinutesBefore = d.GraceMinutesBefore,
+            GraceMinutesAfter = d.GraceMinutesAfter,
+            AllowOvertime = d.AllowOvertime
+        };
+    }
+
+    private void CopyFrom(DepartmentDto d)
+    {
+        // Same as Edit but Id = 0 and suffix on name so it saves as new
+        editDepartment = new DepartmentDto
+        {
+            Id = 0,
+            Name = d.Name + " (copy)",
+            RequiredHoursPerWeek = d.RequiredHoursPerWeek,
+            DailyStartTime = d.DailyStartTime,
+            DailyEndTime = d.DailyEndTime,
+            BreakPerDay = d.BreakPerDay,
+            WorksSaturday = d.WorksSaturday,
+            RotatingWeekends = d.RotatingWeekends,
+            SaturdaysPerMonthRequired = d.SaturdaysPerMonthRequired,
+            SaturdayHours = d.SaturdayHours,
+            WorksSunday = d.WorksSunday,
+            SundayHours = d.SundayHours,
+            GraceMinutesBefore = d.GraceMinutesBefore,
+            GraceMinutesAfter = d.GraceMinutesAfter,
+            AllowOvertime = d.AllowOvertime
+        };
+    }
+
+    private async Task Save()
+    {
+        var duplicate = departments!
+            .Any(d => d.Name.Equals(editDepartment.Name, StringComparison.OrdinalIgnoreCase)
+                   && d.Id != editDepartment.Id);
+
+        if (duplicate)
+        {
+            await JS.InvokeVoidAsync("alert", "A department with this name already exists.");
+            return;
+        }
+
+        if (editDepartment.Id != 0)
+        {
+            var confirmUpdate = await JS.InvokeAsync<bool>(
+                "confirm",
+                $"Update department {editDepartment.Name}?");
+            if (!confirmUpdate)
+                return;
+        }
+
+        if (editDepartment.Id == 0)
+        {
+            var response = await Http.PostAsJsonAsync("api/departments", editDepartment);
+            if (!response.IsSuccessStatusCode)
+            {
+                await JS.InvokeVoidAsync("alert", "Failed to save department.");
+                return;
+            }
+
+            var created = await response.Content.ReadFromJsonAsync<DepartmentDto>();
+            if (created != null)
+            {
+                departments!.Add(created);
+                await JS.InvokeVoidAsync("alert", $"Saved new department {created.Name}.");
+            }
+        }
+        else
+        {
+            var response = await Http.PutAsJsonAsync($"api/departments/{editDepartment.Id}", editDepartment);
+            if (!response.IsSuccessStatusCode)
+            {
+                await JS.InvokeVoidAsync("alert", "Failed to update department.");
+                return;
+            }
+
+            var existing = departments!.First(d => d.Id == editDepartment.Id);
+            existing.Name = editDepartment.Name;
+            existing.RequiredHoursPerWeek = editDepartment.RequiredHoursPerWeek;
+            existing.DailyStartTime = editDepartment.DailyStartTime;
+            existing.DailyEndTime = editDepartment.DailyEndTime;
+            existing.BreakPerDay = editDepartment.BreakPerDay;
+            existing.WorksSaturday = editDepartment.WorksSaturday;
+            existing.RotatingWeekends = editDepartment.RotatingWeekends;
+            existing.SaturdaysPerMonthRequired = editDepartment.SaturdaysPerMonthRequired;
+            existing.SaturdayHours = editDepartment.SaturdayHours;
+            existing.WorksSunday = editDepartment.WorksSunday;
+            existing.SundayHours = editDepartment.SundayHours;
+            existing.GraceMinutesBefore = editDepartment.GraceMinutesBefore;
+            existing.GraceMinutesAfter = editDepartment.GraceMinutesAfter;
+            existing.AllowOvertime = editDepartment.AllowOvertime;
+
+            await JS.InvokeVoidAsync("alert", $"Updated department {existing.Name}.");
+        }
+
+        Reset();
+    }
+
+    private async Task Delete(int id)
+    {
+        var department = departments!.FirstOrDefault(d => d.Id == id);
+        if (department is null)
+            return;
+
+        var confirmDelete = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Are you sure you want to delete {department.Name}?");
+        if (!confirmDelete)
+            return;
+
+        var response = await Http.DeleteAsync($"api/departments/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            departments.Remove(department);
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to delete department.");
+        }
+    }
+
+    private void Reset()
+    {
+        editDepartment = new DepartmentDto
+        {
+            AllowOvertime = true,
+            GraceMinutesBefore = 0,
+            GraceMinutesAfter = 0,
+            RequiredHoursPerWeek = 40,
+            DailyStartTime = "08:00",
+            DailyEndTime = "17:00",
+            BreakPerDay = "01:00",
+            WorksSaturday = false,
+            RotatingWeekends = false,
+            SaturdaysPerMonthRequired = 0,
+            SaturdayHours = 5,
+            WorksSunday = false,
+            SundayHours = 0
+        };
+    }
+}
