@@ -6,6 +6,27 @@
 
 <h3 class="mb-3">Employees</h3>
 
+<div class="row mb-3">
+    <div class="col-md-4 col-6 mb-2">
+        <label class="form-label">Search Employee</label>
+        <input type="text"
+               class="form-control"
+               @bind="nameFilter"
+               @bind:event="oninput"
+               placeholder="Type to search..." />
+    </div>
+    <div class="col-md-4 col-6 mb-2">
+        <label class="form-label">Department</label>
+        <select class="form-select" @bind="departmentFilter">
+            <option value="">All Departments</option>
+            @foreach (var dept in departmentNames)
+            {
+                <option value="@dept">@dept</option>
+            }
+        </select>
+    </div>
+</div>
+
 @if (employees is null)
 {
     <div class="alert alert-info">Loading employees...</div>
@@ -29,7 +50,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var e in employees.OrderBy(e => e.Name))
+                @foreach (var e in filteredEmployees)
                 {
                     <tr>
                         <td>
@@ -76,81 +97,107 @@ else
     </div>
 }
 
-<h4>@(editEmployee.Id == 0 ? "Add Employee" : "Edit Employee")</h4>
+<div id="employee-edit-form" class="mt-4">
+    <h4>@(editEmployee.Id == 0 ? "Add Employee" : "Edit Employee")</h4>
 
-<EditForm Model="editEmployee" OnValidSubmit="Save">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
+    <EditForm Model="editEmployee" OnValidSubmit="Save">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
 
-    <div class="mb-2">
-        <label>Name</label>
-        <InputText class="form-control" @bind-Value="editEmployee.Name" />
-    </div>
-    <div class="mb-2">
-        <label>Email</label>
-        <InputText class="form-control" @bind-Value="editEmployee.Email" />
-        <ValidationMessage For="@(() => editEmployee.Email)" />
-    </div>
-    <div class="mb-2">
-        <label>Phone</label>
-        <InputText class="form-control" @bind-Value="editEmployee.Phone" />
-    </div>
-    <div class="mb-2">
-        <label>Department</label>
-        <InputSelect class="form-control" @bind-Value="editEmployee.DepartmentId">
-            <option value="0">-- Select --</option>
-            @foreach (var d in departments)
-            {
-                <option value="@d.Id">@d.Name</option>
-            }
-        </InputSelect>
-    </div>
-    <div class="mb-2 form-check">
-        <InputCheckbox class="form-check-input" @bind-Value="editEmployee.IsActive" />
-        <label class="form-check-label ms-1">Active</label>
-    </div>
-    <div class="mb-2">
-        <label>Role</label>
-        <InputSelect class="form-control" @bind-Value="editEmployee.Role">
-            <option value="Employee">Employee</option>
-            <option value="Admin">Admin</option>
-        </InputSelect>
-    </div>
+        <div class="mb-2">
+            <label>Name</label>
+            <InputText class="form-control" @bind-Value="editEmployee.Name" />
+        </div>
+        <div class="mb-2">
+            <label>Email</label>
+            <InputText class="form-control" @bind-Value="editEmployee.Email" />
+            <ValidationMessage For="@(() => editEmployee.Email)" />
+        </div>
+        <div class="mb-2">
+            <label>Phone</label>
+            <InputText class="form-control" @bind-Value="editEmployee.Phone" />
+        </div>
+        <div class="mb-2">
+            <label>Department</label>
+            <InputSelect class="form-control" @bind-Value="editEmployee.DepartmentId">
+                <option value="0">-- Select --</option>
+                @foreach (var d in departments)
+                {
+                    <option value="@d.Id">@d.Name</option>
+                }
+            </InputSelect>
+        </div>
+        <div class="mb-2 form-check">
+            <InputCheckbox class="form-check-input" @bind-Value="editEmployee.IsActive" />
+            <label class="form-check-label ms-1">Active</label>
+        </div>
+        <div class="mb-2">
+            <label>Role</label>
+            <InputSelect class="form-control" @bind-Value="editEmployee.Role">
+                <option value="Employee">Employee</option>
+                <option value="Admin">Admin</option>
+            </InputSelect>
+        </div>
 
-    <div class="mt-3">
-        <button type="submit" class="btn btn-success">
-            @(editEmployee.Id == 0 ? "Save" : "Update")
-        </button>
-        <button type="button" class="btn btn-secondary ms-2" @onclick="Reset">
-            Cancel
-        </button>
-
-        @* New: reset password button shown only when editing *@
-        @if (editEmployee.Id != 0)
-        {
-            <button type="button"
-                    class="btn btn-warning ms-2"
-                    @onclick="ResetPassword">
-                Reset password (first-time login)
+        <div class="mt-3">
+            <button type="submit" class="btn btn-success">
+                @(editEmployee.Id == 0 ? "Save" : "Update")
             </button>
-        }
-    </div>
-</EditForm>
+            <button type="button" class="btn btn-secondary ms-2" @onclick="Reset">
+                Cancel
+            </button>
+
+            @if (editEmployee.Id != 0)
+            {
+                <button type="button"
+                        class="btn btn-warning ms-2"
+                        @onclick="ResetPassword">
+                    Reset password (first-time login)
+                </button>
+            }
+        </div>
+    </EditForm>
+</div>
 
 @code {
     private List<EmployeeDto>? employees;
     private List<DepartmentDto> departments = new();
+
+    // Filters
+    private string nameFilter = "";
+    private string departmentFilter = "";
+    private List<string> departmentNames = new();
+
     private EmployeeDto editEmployee = new();
+
+    private IEnumerable<EmployeeDto> filteredEmployees =>
+        (employees ?? Enumerable.Empty<EmployeeDto>())
+            .Where(e =>
+                (string.IsNullOrWhiteSpace(nameFilter) ||
+                 e.Name.Contains(nameFilter, StringComparison.OrdinalIgnoreCase) ||
+                 (!string.IsNullOrWhiteSpace(e.Email) &&
+                  e.Email.Contains(nameFilter, StringComparison.OrdinalIgnoreCase))) &&
+                (string.IsNullOrWhiteSpace(departmentFilter) ||
+                 string.Equals(e.Department?.Name, departmentFilter, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(e => e.Name);
 
     protected override async Task OnInitializedAsync()
     {
         departments = await Http.GetFromJsonAsync<List<DepartmentDto>>("api/departments") ?? new();
         employees = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/employees") ?? new();
+
+        departmentNames = employees
+            .Where(e => e.Department != null && !string.IsNullOrWhiteSpace(e.Department.Name))
+            .Select(e => e.Department!.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n)
+            .ToList();
+
+        Reset();
     }
 
-    private void Edit(EmployeeDto e)
+    private async Task Edit(EmployeeDto e)
     {
-        // Clone so edits don't immediately change list until Save
         editEmployee = new EmployeeDto
         {
             Id = e.Id,
@@ -163,14 +210,16 @@ else
             Department = e.Department,
             Role = e.Role
         };
+
+        // Use existing JS helper: window.scrollToElement(selector)
+        await JS.InvokeVoidAsync("scrollToElement", "#employee-edit-form");
     }
 
     private async Task Save()
     {
         if (editEmployee.DepartmentId == 0)
-            return; // basic guard
+            return;
 
-        // Duplicate check by Email (ignore case, ignore same record)
         var duplicate = employees!
             .Any(e => e.Email.Equals(editEmployee.Email, StringComparison.OrdinalIgnoreCase)
                    && e.Id != editEmployee.Id);
@@ -181,7 +230,6 @@ else
             return;
         }
 
-        // If editing, confirm before update
         if (editEmployee.Id != 0)
         {
             var confirmUpdate = await JS.InvokeAsync<bool>(
@@ -227,7 +275,6 @@ else
             existing.Role = editEmployee.Role;
         }
 
-        // Optional: sync role via API endpoint
         if (editEmployee.Id != 0)
         {
             await Http.PostAsJsonAsync(

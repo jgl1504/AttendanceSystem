@@ -266,6 +266,10 @@
     private List<AttendanceListItemDto> todaysSegments = new();
     private DateTime today = DateTime.Today;
 
+    // SA is UTC+2, no DST; using a fixed offset avoids TimeZoneInfo in WASM.[web:25][web:33]
+    private DateTime ToSaTime(DateTime utc)
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).AddHours(2);
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -346,8 +350,8 @@
         if (!selectedEmployeeId.HasValue)
         {
             isSelectedEmployeeClockedIn = false;
-            statusMessage = "Select an employee.";
             todaysSegments = new();
+            statusMessage = "Select an employee.";
             return;
         }
 
@@ -441,12 +445,20 @@
             return;
         }
 
-        var status = await Http.GetFromJsonAsync<ClockStatusDto>($"api/attendance/status/{selectedEmployeeId.Value}");
+        var status = await Http.GetFromJsonAsync<ClockStatusDto>(
+            $"api/attendance/status/{selectedEmployeeId.Value}");
+
         isSelectedEmployeeClockedIn = status?.IsClockedIn ?? false;
 
-        statusMessage = isSelectedEmployeeClockedIn
-            ? $"Currently clocked in since {status!.LastClockInTime:g}"
-            : "Currently clocked out.";
+        if (isSelectedEmployeeClockedIn && status?.LastClockInTime is DateTime utc)
+        {
+            var saTime = ToSaTime(utc);
+            statusMessage = $"Currently clocked in since {saTime:dd/MM/yyyy HH:mm}";
+        }
+        else
+        {
+            statusMessage = "Currently clocked out.";
+        }
 
         await LoadTodaySegmentsAsync();
     }

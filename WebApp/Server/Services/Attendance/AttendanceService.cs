@@ -38,17 +38,14 @@ public class AttendanceService
 
     public async Task<bool> ClockInAsync(ClockRequestDto request, int clockedByEmployeeId)
     {
-        // Use a transaction to avoid race conditions on slow/bad connections
         using var transaction = await _context.Database.BeginTransactionAsync();
 
-        // Re-check for an open record INSIDE the transaction
         var openRecord = await _context.AttendanceRecords
             .Where(a => a.EmployeeId == request.EmployeeId && a.ClockOutTime == null)
             .FirstOrDefaultAsync();
 
         if (openRecord is not null)
         {
-            // already clocked in
             return false;
         }
 
@@ -83,7 +80,6 @@ public class AttendanceService
         }
     }
 
-
     public async Task<bool> ClockOutAsync(ClockRequestDto request, int clockedByEmployeeId)
     {
         var openRecord = await _context.AttendanceRecords
@@ -91,7 +87,7 @@ public class AttendanceService
                                       a.ClockOutTime == null);
 
         if (openRecord is null)
-            return false; // not clocked in
+            return false;
 
         openRecord.ClockOutTime = DateTime.UtcNow;
         openRecord.ClockOutLatitude = request.Latitude;
@@ -137,24 +133,22 @@ public class AttendanceService
             .OrderBy(a => a.ClockInTime)
             .ToListAsync();
 
-        // 1) Compute HoursWorked per segment (record)
+        // 1) Compute HoursWorked per segment (record) WITHOUT subtracting daily break,
+        //    so short segments like 20:08–20:29 show their actual duration.
         foreach (var a in records)
         {
-            var dept = a.Employee.Department!;
-            var breakHours = dept.BreakPerDay.TotalHours;
+            double? hoursWorked = null;
 
-            double hoursWorked = 0;
             if (a.ClockOutTime.HasValue)
             {
                 var total = (a.ClockOutTime.Value - a.ClockInTime).TotalHours;
-                hoursWorked = Math.Max(0, total - breakHours);
+                hoursWorked = Math.Round(Math.Max(0, total), 2);
             }
 
-            a.HoursWorked = Math.Round(hoursWorked, 2);
+            a.HoursWorked = hoursWorked;
         }
 
         // 2) Group by employee + date to compute DAILY totals
-        //    (all segments for that employee on this day)
         var dailyGroups = records
             .GroupBy(a => a.EmployeeId)
             .ToDictionary(
@@ -197,7 +191,6 @@ public class AttendanceService
                     var totalHoursForDay = g.Sum(x => x.HoursWorked ?? 0);
                     var rawOvertime = Math.Max(0, totalHoursForDay - expectedHours);
 
-                    // Decide daily overtime status from any record that has a decision
                     var anyApproved = g.Any(x => x.OvertimeStatus == OvertimeStatus.Approved);
                     var anyDenied = g.Any(x => x.OvertimeStatus == OvertimeStatus.Denied);
                     OvertimeStatus status;
@@ -240,20 +233,18 @@ public class AttendanceService
                     };
                 });
 
-        // 3) Project per record DTO, but attach DAILY overtime info
+        // 3) Project per record DTO, attaching daily overtime info
         var list = new List<AttendanceListItemDto>();
 
         foreach (var a in records)
         {
             var daily = dailyGroups[a.EmployeeId];
 
-            // Persist daily values back onto entities (so decisions stay daily-consistent)
             a.OvertimeHours = daily.OvertimeHours;
             a.WeekdayOvertimeHours = daily.WeekdayOvertime;
             a.SundayPublicOvertimeHours = daily.SundayHolidayOvertime;
             a.OvertimeStatus = daily.Status;
 
-            // Category breakdown (per segment)
             double? normalHours = null;
             double? driverHours = null;
             double? breakdownHours = null;
@@ -279,7 +270,7 @@ public class AttendanceService
                 // Segment hours
                 HoursWorked = a.HoursWorked,
 
-                // DAILY expected/OT (same for all segments of this employee on this date)
+                // DAILY expected/OT
                 ExpectedHours = daily.ExpectedHours,
                 OvertimeHours = daily.OvertimeHours,
                 WeekdayOvertimeHours = daily.WeekdayOvertime,
