@@ -40,11 +40,10 @@ namespace WebApp.Shared.Model
 
         public decimal DaysTaken { get; set; } // e.g., 5.0
 
-        // New: full vs half day
         public LeavePortion Portion { get; set; } = LeavePortion.FullDay;
 
-        public LeaveType LeaveType { get; set; } // Annual, Sick, Family, etc.
-        public LeaveStatus Status { get; set; } // Pending, Approved, Rejected, Taken
+        public LeaveType LeaveType { get; set; }
+        public LeaveStatus Status { get; set; }
 
         public string Reason { get; set; }
         public DateTime RequestedAt { get; set; }
@@ -52,7 +51,11 @@ namespace WebApp.Shared.Model
         public int? ApprovedBy { get; set; }
 
         public DateTime CreatedAt { get; set; }
+
+        // NEW: stored file name for doctor's letter / proof
+        public string? AttachmentFileName { get; set; }
     }
+
 
     public enum LeaveType
     {

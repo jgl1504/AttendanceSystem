@@ -1,6 +1,7 @@
 ﻿@page "/leave/request"
 @using WebApp.Shared.Model
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
 @inject HttpClient Http
 @inject IJSRuntime JS
 
@@ -69,6 +70,8 @@
                     </InputSelect>
                 </div>
             </div>
+
+            @* Attachment UI removed *@
 
             <div class="mb-3">
                 <label class="form-label">Reason (optional)</label>
@@ -172,7 +175,6 @@
     private EmployeeLeaveDto? balance;
     private List<LeaveRecordDto>? records;
 
-    // decimal so Saturdays can count as 0.5
     private decimal calculatedDays = 0;
 
     private bool isSubmitting;
@@ -273,7 +275,6 @@
         calculatedDays = CalculateWorkingDays(startDate, endDate);
     }
 
-    // Saturdays = 0.5, Sundays ignored, others = 1.0
     private decimal CalculateWorkingDays(DateTime start, DateTime end)
     {
         if (end < start) return 0;
@@ -300,15 +301,13 @@
     }
 
     private decimal GetEffectiveDays(decimal workingDays, LeavePortion portion)
-        => portion == LeavePortion.HalfDay ? workingDays * 0.5m : workingDays * 1.0m; 
+        => portion == LeavePortion.HalfDay ? workingDays * 0.5m : workingDays * 1.0m;
 
     private bool IsSundayOnlyRange(DateTime start, DateTime end)
     {
-        // Single day and that day is Sunday
         if (start.Date == end.Date && start.DayOfWeek == DayOfWeek.Sunday)
             return true;
 
-        // Multi-day: check that every day in range is Sunday
         var current = start.Date;
         var last = end.Date;
 
@@ -342,7 +341,6 @@
             return;
         }
 
-        // Block Sunday-only leave and show popup
         if (IsSundayOnlyRange(startDate, endDate))
         {
             await JS.InvokeVoidAsync("showInfo", "You selected only Sunday. This is a non-working day and cannot be requested as leave.");
@@ -361,7 +359,7 @@
             Portion = SelectedPortion
         };
 
-        var response = await Http.PostAsJsonAsync("api/leave/request", dto);
+        HttpResponseMessage response = await Http.PostAsJsonAsync("api/leave/request", dto);
 
         isSubmitting = false;
 

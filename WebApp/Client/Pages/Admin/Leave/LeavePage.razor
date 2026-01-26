@@ -26,6 +26,7 @@ else
                 <th>Type</th>
                 <th>Requested</th>
                 <th>Reason</th>
+                <th>Proof</th>
                 <th></th>
             </tr>
         </thead>
@@ -42,6 +43,20 @@ else
                     <td>@r.RequestedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                     <td>@r.Reason</td>
                     <td>
+                        @if ((r.LeaveType == LeaveType.Sick || r.LeaveType == LeaveType.FamilyResponsibility)
+                                        && !string.IsNullOrWhiteSpace(r.AttachmentFileName))
+                        {
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    @onclick="() => ViewAttachment(r.Id)">
+                                View
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="text-muted small">None</span>
+                        }
+                    </td>
+                    <td>
                         <button class="btn btn-sm btn-success me-1" @onclick="() => Approve(r.Id)">Approve</button>
                         <button class="btn btn-sm btn-outline-danger" @onclick="() => Reject(r.Id)">Reject</button>
                     </td>
@@ -52,7 +67,7 @@ else
 }
 
 @code {
-    private List<LeaveRecordDto> pending;
+    private List<LeaveRecordDto>? pending;
 
     protected override async Task OnInitializedAsync()
     {
@@ -92,5 +107,19 @@ else
         }
 
         await LoadPending();
+    }
+
+    private async Task ViewAttachment(int id)
+    {
+        // This expects your API to return a URL or open a file stream.
+        // For now, we'll assume an endpoint like api/leave/attachment/{id} that returns a URL string.
+        var url = await Http.GetStringAsync($"api/leave/attachment-url/{id}");
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            await JS.InvokeVoidAsync("alert", "No attachment found for this request.");
+            return;
+        }
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
     }
 }

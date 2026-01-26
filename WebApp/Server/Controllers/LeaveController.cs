@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using WebApp.Server.Services.Employees;
 using WebApp.Server.Services.Leave;
 using WebApp.Shared.Model;
@@ -11,7 +12,7 @@ namespace WebApp.Server.Controllers;
 public class LeaveController : ControllerBase
 {
     private readonly LeaveService _leaveService;
-    private readonly EmployeeService _employeeService; // same pattern as elsewhere
+    private readonly EmployeeService _employeeService;
 
     public LeaveController(LeaveService leaveService, EmployeeService employeeService)
     {
@@ -44,7 +45,8 @@ public class LeaveController : ControllerBase
         return Ok(records);
     }
 
-    // POST api/leave/request
+    // POST api/leave/request  (multipart/form-data: RequestLeaveDto fields + optional Attachment)
+    // POST api/leave/request  (JSON only, no attachment)
     [HttpPost("request")]
     public async Task<ActionResult> RequestLeave([FromBody] RequestLeaveDto request)
     {
@@ -52,6 +54,7 @@ public class LeaveController : ControllerBase
         if (!ok) return BadRequest(new { message = "Insufficient balance or invalid request." });
         return Ok();
     }
+
 
     // POST api/leave/approve/10
     [HttpPost("approve/{id:int}")]
@@ -71,6 +74,19 @@ public class LeaveController : ControllerBase
         return Ok();
     }
 
+    // GET api/leave/attachment-url/10
+    // Returns a relative URL like /leave-attachments/{fileName} for the admin "View" button.
+    [HttpGet("attachment-url/{id:int}")]
+    public async Task<ActionResult<string>> GetAttachmentUrl(int id)
+    {
+        var fileName = await _leaveService.GetAttachmentFileNameAsync(id);
+        if (string.IsNullOrWhiteSpace(fileName))
+            return NotFound();
+
+        var url = $"/leave-attachments/{fileName}";
+        return Ok(url);
+    }
+
     // GET api/leave/setup
     [HttpGet("setup")]
     public async Task<ActionResult<List<LeaveSetupRowDto>>> GetSetup()
@@ -87,5 +103,4 @@ public class LeaveController : ControllerBase
         if (!ok) return BadRequest(new { message = "Failed to save leave setup." });
         return Ok();
     }
-
 }

@@ -8,7 +8,6 @@ namespace WebApp.Shared.Model
         HalfDay = 2
     }
 
-    // Shared DTOs
     public class EmployeeLeaveDto
     {
         public int Id { get; set; }
@@ -33,9 +32,10 @@ namespace WebApp.Shared.Model
         public string Reason { get; set; }
         public DateTime RequestedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
-
-        // New: how this record was taken (full vs half day)
         public LeavePortion Portion { get; set; }
+
+        // New: attachment file name or relative URL
+        public string? AttachmentFileName { get; set; }
     }
 
     public class RequestLeaveDto
@@ -45,9 +45,10 @@ namespace WebApp.Shared.Model
         public DateTime EndDate { get; set; }
         public LeaveType LeaveType { get; set; }
         public string Reason { get; set; }
-
-        // New: what the employee selects on the request page
         public LeavePortion Portion { get; set; } = LeavePortion.FullDay;
+
+        // Optional for API that echoes back data; the actual file travels separately
+        public string? AttachmentFileName { get; set; }
     }
 
     public class LeaveSetupRowDto

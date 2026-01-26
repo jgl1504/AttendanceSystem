@@ -23,7 +23,6 @@ namespace WebApp.Server.Services.Leave
             if (leave == null)
                 return null;
 
-            // Auto-accrue if needed
             await AccrueLeaveIfDueAsync(leave);
 
             return new EmployeeLeaveDto
@@ -43,7 +42,6 @@ namespace WebApp.Server.Services.Leave
         {
             var today = DateTime.UtcNow;
 
-            // Check if we've entered a new month since last accrual
             if (leave.LastAccrualMonth == 0 || today.Month != leave.LastAccrualMonth)
             {
                 leave.DaysBalance += leave.AccrualRatePerMonth;
@@ -55,6 +53,7 @@ namespace WebApp.Server.Services.Leave
             }
         }
 
+        // Request leave WITHOUT attachment
         public async Task<bool> RequestLeaveAsync(RequestLeaveDto request)
         {
             var employee = await _context.Employees.FindAsync(request.EmployeeId);
@@ -64,8 +63,24 @@ namespace WebApp.Server.Services.Leave
             var leave = await _context.EmployeeLeaves
                 .FirstOrDefaultAsync(l => l.EmployeeId == request.EmployeeId);
 
+            // If no leave row yet, create one with default values so requests can still be stored
             if (leave == null)
-                return false;
+            {
+                leave = new EmployeeLeave
+                {
+                    EmployeeId = request.EmployeeId,
+                    DaysBalance = 0,
+                    // Use same defaults as InitializeEmployeeLeaveAsync
+                    DaysPerWeek = 5,
+                    AccrualRatePerMonth = 1.25m,
+                    LastAccrualDate = DateTime.UtcNow,
+                    LastAccrualMonth = DateTime.UtcNow.Month,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.EmployeeLeaves.Add(leave);
+                await _context.SaveChangesAsync();
+            }
 
             var workingDays = CalculateWorkingDays(request.StartDate, request.EndDate);
 
@@ -74,7 +89,7 @@ namespace WebApp.Server.Services.Leave
             {
                 daysTaken = workingDays <= 0 ? 0.5m : workingDays * 0.5m;
             }
-            else // FullDay
+            else
             {
                 daysTaken = workingDays <= 0 ? 1.0m : workingDays;
             }
@@ -90,12 +105,9 @@ namespace WebApp.Server.Services.Leave
                 Reason = request.Reason,
                 RequestedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                Portion = request.Portion
+                Portion = request.Portion,
+                AttachmentFileName = null
             };
-
-            // Marker override so we can SEE that this code is actually running
-            //leaveRecord.DaysTaken = 9.99m;
-            //leaveRecord.Portion = LeavePortion.HalfDay;
 
             _context.LeaveRecords.Add(leaveRecord);
             await _context.SaveChangesAsync();
@@ -103,6 +115,14 @@ namespace WebApp.Server.Services.Leave
             return true;
         }
 
+        public async Task<string?> GetAttachmentFileNameAsync(int leaveRecordId)
+        {
+            var record = await _context.LeaveRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == leaveRecordId);
+
+            return record?.AttachmentFileName;
+        }
 
         // Approve leave and deduct from balance
         public async Task<bool> ApproveLeaveAsync(int leaveRecordId)
@@ -122,14 +142,13 @@ namespace WebApp.Server.Services.Leave
                 if (leave == null)
                     return false;
 
-                // Allow balance to go negative
+                // This can take the balance to 0 or below
                 leave.DaysBalance -= record.DaysTaken;
                 _context.EmployeeLeaves.Update(leave);
             }
 
             record.Status = LeaveStatus.Approved;
             record.ApprovedAt = DateTime.UtcNow;
-            // record.ApprovedBy = ... // leave null for now
 
             _context.LeaveRecords.Update(record);
             await _context.SaveChangesAsync();
@@ -156,7 +175,8 @@ namespace WebApp.Server.Services.Leave
                     Reason = r.Reason,
                     RequestedAt = r.RequestedAt,
                     ApprovedAt = r.ApprovedAt,
-                    Portion = r.Portion
+                    Portion = r.Portion,
+                    AttachmentFileName = r.AttachmentFileName
                 })
                 .ToListAsync();
         }
@@ -181,7 +201,8 @@ namespace WebApp.Server.Services.Leave
                     Reason = r.Reason,
                     RequestedAt = r.RequestedAt,
                     ApprovedAt = r.ApprovedAt,
-                    Portion = r.Portion
+                    Portion = r.Portion,
+                    AttachmentFileName = r.AttachmentFileName
                 })
                 .ToListAsync();
         }
@@ -195,7 +216,6 @@ namespace WebApp.Server.Services.Leave
 
             record.Status = LeaveStatus.Rejected;
             record.ApprovedAt = DateTime.UtcNow;
-            // record.ApprovedBy = ... // leave null for now
 
             _context.LeaveRecords.Update(record);
             await _context.SaveChangesAsync();
@@ -229,7 +249,7 @@ namespace WebApp.Server.Services.Leave
             var leave = new EmployeeLeave
             {
                 EmployeeId = employeeId,
-                DaysBalance = 0, // Can set to starting balance if needed
+                DaysBalance = 0,
                 AccrualRatePerMonth = accrualRate,
                 DaysPerWeek = daysPerWeek,
                 LastAccrualDate = DateTime.UtcNow,
