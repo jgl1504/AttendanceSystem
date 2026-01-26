@@ -30,7 +30,9 @@
                     </div>
 
                     <div class="mb-3">
-                        <select class="form-select" @onchange="OnEmployeeChanged" disabled="@(employees is null || !employees.Any())">
+                        <select class="form-select"
+                                @onchange="OnEmployeeChanged"
+                                disabled="@(employees is null || !employees.Any())">
                             <option value="">-- Select employee --</option>
                             @if (employees is not null)
                             {
@@ -42,7 +44,6 @@
                         </select>
                     </div>
 
-                    <!-- Category selection (mobile) -->
                     <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input"
@@ -74,18 +75,17 @@
                     </div>
 
                     <button class="btn btn-success btn-lg w-100 mb-2"
-                            disabled="@(!CanClockIn)"
+                            disabled="@(!CanClockIn || isClockingIn)"
                             @onclick="ClockIn">
-                        Clock In
+                        @(isClockingIn ? "Clocking in..." : "Clock In")
                     </button>
 
                     <button class="btn btn-danger btn-lg w-100"
-                            disabled="@(!CanClockOut)"
+                            disabled="@(!CanClockOut || isClockingOut)"
                             @onclick="ClockOut">
-                        Clock Out
+                        @(isClockingOut ? "Clocking out..." : "Clock Out")
                     </button>
 
-                    <!-- Today's segments summary (mobile) -->
                     @if (todaysSegments.Any())
                     {
                         <div class="mt-3">
@@ -136,7 +136,9 @@
 
                             <div class="mb-3">
                                 <label class="form-label">Employee</label>
-                                <select class="form-select" @onchange="OnEmployeeChanged" disabled="@(employees is null || !employees.Any())">
+                                <select class="form-select"
+                                        @onchange="OnEmployeeChanged"
+                                        disabled="@(employees is null || !employees.Any())">
                                     <option value="">-- Select employee --</option>
                                     @if (employees is not null)
                                     {
@@ -148,7 +150,6 @@
                                 </select>
                             </div>
 
-                            <!-- Category selection (desktop) -->
                             <div class="mb-3">
                                 <label class="form-label">Category</label>
                                 <div class="form-check">
@@ -182,19 +183,18 @@
 
                             <div class="mb-3">
                                 <button class="btn btn-success w-100 mb-2"
-                                        disabled="@(!CanClockIn)"
+                                        disabled="@(!CanClockIn || isClockingIn)"
                                         @onclick="ClockIn">
-                                    Clock In
+                                    @(isClockingIn ? "Clocking in..." : "Clock In")
                                 </button>
 
                                 <button class="btn btn-danger w-100"
-                                        disabled="@(!CanClockOut)"
+                                        disabled="@(!CanClockOut || isClockingOut)"
                                         @onclick="ClockOut">
-                                    Clock Out
+                                    @(isClockingOut ? "Clocking out..." : "Clock Out")
                                 </button>
                             </div>
 
-                            <!-- Today's segments summary (desktop) -->
                             @if (todaysSegments.Any())
                             {
                                 <div class="mb-3">
@@ -256,10 +256,12 @@
     private string statusMessage = "Select an employee.";
     private bool isError = false;
 
+    private bool isClockingIn;
+    private bool isClockingOut;
+
     private bool CanClockIn => selectedEmployeeId.HasValue && !isSelectedEmployeeClockedIn;
     private bool CanClockOut => selectedEmployeeId.HasValue && isSelectedEmployeeClockedIn;
 
-    // New: category and today's segments
     private WorkCategory selectedCategory = WorkCategory.Normal;
     private List<AttendanceListItemDto> todaysSegments = new();
     private DateTime today = DateTime.Today;
@@ -300,7 +302,7 @@
         }
         else
         {
-            selectedDepartmentId = null; // All
+            selectedDepartmentId = null;
         }
 
         selectedEmployeeId = null;
@@ -349,13 +351,7 @@
             return;
         }
 
-        var result = await Http.GetFromJsonAsync<ClockStatusDto>($"api/attendance/status/{selectedEmployeeId.Value}");
-        isSelectedEmployeeClockedIn = result?.IsClockedIn ?? false;
-        statusMessage = isSelectedEmployeeClockedIn
-            ? $"Currently clocked in since {result!.LastClockInTime:g}"
-            : "Currently clocked out.";
-
-        await LoadTodaySegmentsAsync();
+        await RefreshStatusAndSegments();
     }
 
     private void OnCategoryChanged(ChangeEventArgs e)
@@ -371,7 +367,10 @@
 
     private async Task ClockIn()
     {
-        if (!selectedEmployeeId.HasValue) return;
+        if (!selectedEmployeeId.HasValue || isClockingIn || isSelectedEmployeeClockedIn)
+            return;
+
+        isClockingIn = true;
 
         var loc = await GetLocationAsync();
 
@@ -384,23 +383,27 @@
         };
 
         var response = await Http.PostAsJsonAsync("api/attendance/clockin", request);
+        isClockingIn = false;
+
         if (!response.IsSuccessStatusCode)
         {
             isError = true;
-            statusMessage = "Already clocked for today. Contact admin to clear if needed.";
+            statusMessage = "Already clocked in. Please clock out first.";
+            await RefreshStatusAndSegments();
             return;
         }
 
         isError = false;
-        isSelectedEmployeeClockedIn = true;
         statusMessage = "Clocked in.";
-
-        await LoadTodaySegmentsAsync();
+        await RefreshStatusAndSegments();
     }
 
     private async Task ClockOut()
     {
-        if (!selectedEmployeeId.HasValue) return;
+        if (!selectedEmployeeId.HasValue || isClockingOut || !isSelectedEmployeeClockedIn)
+            return;
+
+        isClockingOut = true;
 
         var loc = await GetLocationAsync();
 
@@ -413,16 +416,37 @@
         };
 
         var response = await Http.PostAsJsonAsync("api/attendance/clockout", request);
+        isClockingOut = false;
+
         if (!response.IsSuccessStatusCode)
         {
             isError = true;
             statusMessage = "Clock out failed.";
+            await RefreshStatusAndSegments();
             return;
         }
 
         isError = false;
-        isSelectedEmployeeClockedIn = false;
         statusMessage = "Clocked out.";
+        await RefreshStatusAndSegments();
+    }
+
+    private async Task RefreshStatusAndSegments()
+    {
+        if (!selectedEmployeeId.HasValue)
+        {
+            isSelectedEmployeeClockedIn = false;
+            todaysSegments = new();
+            statusMessage = "Select an employee.";
+            return;
+        }
+
+        var status = await Http.GetFromJsonAsync<ClockStatusDto>($"api/attendance/status/{selectedEmployeeId.Value}");
+        isSelectedEmployeeClockedIn = status?.IsClockedIn ?? false;
+
+        statusMessage = isSelectedEmployeeClockedIn
+            ? $"Currently clocked in since {status!.LastClockInTime:g}"
+            : "Currently clocked out.";
 
         await LoadTodaySegmentsAsync();
     }

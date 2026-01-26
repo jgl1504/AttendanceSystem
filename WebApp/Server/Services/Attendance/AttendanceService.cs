@@ -38,13 +38,19 @@ public class AttendanceService
 
     public async Task<bool> ClockInAsync(ClockRequestDto request, int clockedByEmployeeId)
     {
-        // Only block if there's an open record; allow multiple closed segments per day
+        // Use a transaction to avoid race conditions on slow/bad connections
+        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        // Re-check for an open record INSIDE the transaction
         var openRecord = await _context.AttendanceRecords
-            .FirstOrDefaultAsync(a => a.EmployeeId == request.EmployeeId &&
-                                      a.ClockOutTime == null);
+            .Where(a => a.EmployeeId == request.EmployeeId && a.ClockOutTime == null)
+            .FirstOrDefaultAsync();
 
         if (openRecord is not null)
-            return false; // must clock out before starting a new segment
+        {
+            // already clocked in
+            return false;
+        }
 
         var record = new AttendanceRecord
         {
@@ -53,9 +59,7 @@ public class AttendanceService
             ClockInTime = DateTime.UtcNow,
             ClockInLatitude = request.Latitude,
             ClockInLongitude = request.Longitude,
-
-            WorkCategory = request.WorkCategory,   // Normal / Driver / Breakdown
-
+            WorkCategory = request.WorkCategory,
             OvertimeStatus = OvertimeStatus.None,
             OvertimeLocation = null,
             OvertimeNote = null,
@@ -65,9 +69,20 @@ public class AttendanceService
         };
 
         _context.AttendanceRecords.Add(record);
-        await _context.SaveChangesAsync();
-        return true;
+
+        try
+        {
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            return false;
+        }
     }
+
 
     public async Task<bool> ClockOutAsync(ClockRequestDto request, int clockedByEmployeeId)
     {

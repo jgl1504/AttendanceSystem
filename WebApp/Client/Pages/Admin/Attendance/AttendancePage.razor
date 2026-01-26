@@ -33,7 +33,7 @@
     <div class="col-md-3 col-6 mb-2">
         <label class="form-label">Approve/Deny as</label>
         <select class="form-select" @bind="selectedApproverId">
-            <option value="0">Select approver</option>
+            <option value="0">Select approver (admins only)</option>
             @foreach (var a in approvers)
             {
                 <option value="@a.Id">@a.Name</option>
@@ -88,12 +88,10 @@ else
                         @if (r.OvertimeHours.HasValue && r.OvertimeHours.Value > 0)
                         {
                             <span>
-                                @(
-                                                    r.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
+                                @(r.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
                                                     r.OvertimeStatus == OvertimeStatus.Denied ? "Denied" :
-                                                    "Pending"
-                                                    )
-                        </span>
+                                                    "Pending")
+                </span>
 
                 @if (r.OvertimeStatus == OvertimeStatus.Pending)
                             {
@@ -174,11 +172,9 @@ else
 
         <p>
             Overtime status:
-            @(
-                    editing.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
+            @(editing.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
                     editing.OvertimeStatus == OvertimeStatus.Denied ? "Denied" :
-                    "Pending"
-                    )
+                    "Pending")
     </p>
 
         <div class="mb-2">
@@ -222,7 +218,6 @@ else
             </div>
         </div>
 
-        <!-- New: category selector in edit panel -->
         <div class="row g-3 mb-3">
             <div class="col-md-3 col-6">
                 <label class="form-label">Category</label>
@@ -249,9 +244,9 @@ else
     private List<EmployeeListItem> employees = new();
     private List<EmployeeListItem> approvers = new();
     private DateTime selectedDate = DateTime.Today;
-    private int selectedEmployeeId = 0; // 0 = all
+    private int selectedEmployeeId = 0;
 
-    private int selectedApproverId = 0; // selected approver for decisions
+    private int selectedApproverId = 0;
 
     private AttendanceListItemDto? editing;
     private AttendanceEditDto editModel = new();
@@ -266,8 +261,10 @@ else
     {
         employees = await Http.GetFromJsonAsync<List<EmployeeListItem>>("api/employees") ?? new();
 
-        // For now, allow any employee as approver; later you can filter to Role == "Admin"
-        approvers = employees;
+        // Only admins can approve overtime
+        approvers = employees
+            .Where(e => e.Role == "Admin")
+            .ToList();
 
         await LoadRecords();
     }
@@ -392,7 +389,7 @@ else
     {
         if (selectedApproverId <= 0)
         {
-            await JS.InvokeVoidAsync("alert", "Select an approver first.");
+            await JS.InvokeVoidAsync("alert", "Select an approver first (admin only).");
             return;
         }
 
@@ -425,7 +422,7 @@ else
     {
         if (selectedApproverId <= 0)
         {
-            await JS.InvokeVoidAsync("alert", "Select an approver first.");
+            await JS.InvokeVoidAsync("alert", "Select an approver first (admin only).");
             return;
         }
 
@@ -490,6 +487,7 @@ else
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
     }
 
     private async Task ClearTodayRecord()
