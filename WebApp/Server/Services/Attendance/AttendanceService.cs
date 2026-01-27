@@ -15,6 +15,23 @@ public class AttendanceService
 
     public async Task<ClockStatusDto> GetStatusAsync(int employeeId)
     {
+        // 1) Prefer any open record (no ClockOutTime), regardless of date
+        var openRecord = await _context.AttendanceRecords
+            .Where(a => a.EmployeeId == employeeId && a.ClockOutTime == null)
+            .OrderByDescending(a => a.ClockInTime)
+            .FirstOrDefaultAsync();
+
+        if (openRecord is not null)
+        {
+            return new ClockStatusDto
+            {
+                IsClockedIn = true,
+                LastClockInTime = openRecord.ClockInTime,
+                LastClockOutTime = null
+            };
+        }
+
+        // 2) No open record – fall back to last closed record
         var lastRecord = await _context.AttendanceRecords
             .Where(a => a.EmployeeId == employeeId)
             .OrderByDescending(a => a.ClockInTime)
@@ -30,11 +47,12 @@ public class AttendanceService
 
         return new ClockStatusDto
         {
-            IsClockedIn = lastRecord.ClockOutTime == null,
+            IsClockedIn = false,
             LastClockInTime = lastRecord.ClockInTime,
             LastClockOutTime = lastRecord.ClockOutTime
         };
     }
+
 
     public async Task<bool> ClockInAsync(ClockRequestDto request, int clockedByEmployeeId)
     {

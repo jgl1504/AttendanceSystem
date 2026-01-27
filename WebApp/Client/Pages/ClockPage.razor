@@ -86,6 +86,14 @@
                         @(isClockingOut ? "Clocking out..." : "Clock Out")
                     </button>
 
+                    @if (showsOldOpenWarning)
+                    {
+                        <div class="alert alert-warning mt-3">
+                            You are still clocked in since @lastClockInLocalString.
+                            Please clock out first, then clock in for today.
+                        </div>
+                    }
+
                     @if (todaysSegments.Any())
                     {
                         <div class="mt-3">
@@ -195,6 +203,14 @@
                                 </button>
                             </div>
 
+                            @if (showsOldOpenWarning)
+                            {
+                                <div class="alert alert-warning mb-3">
+                                    You are still clocked in since @lastClockInLocalString.
+                                    Please clock out first, then clock in for today.
+                                </div>
+                            }
+
                             @if (todaysSegments.Any())
                             {
                                 <div class="mb-3">
@@ -259,6 +275,13 @@
     private bool isClockingIn;
     private bool isClockingOut;
 
+    // New fields to support the warning
+    private bool showsOldOpenWarning;
+    private string? lastClockInLocalString;
+
+    // UI rules:
+    // - CanClockIn only if not clocked in
+    // - CanClockOut whenever clocked in, regardless of date
     private bool CanClockIn => selectedEmployeeId.HasValue && !isSelectedEmployeeClockedIn;
     private bool CanClockOut => selectedEmployeeId.HasValue && isSelectedEmployeeClockedIn;
 
@@ -266,7 +289,6 @@
     private List<AttendanceListItemDto> todaysSegments = new();
     private DateTime today = DateTime.Today;
 
-    // SA is UTC+2, no DST; using a fixed offset avoids TimeZoneInfo in WASM.[web:25][web:33]
     private DateTime ToSaTime(DateTime utc)
         => DateTime.SpecifyKind(utc, DateTimeKind.Utc).AddHours(2);
 
@@ -314,6 +336,8 @@
         isError = false;
         statusMessage = "Select an employee.";
         todaysSegments = new();
+        showsOldOpenWarning = false;
+        lastClockInLocalString = null;
 
         if (allEmployees is null)
         {
@@ -346,6 +370,8 @@
         }
 
         isError = false;
+        showsOldOpenWarning = false;
+        lastClockInLocalString = null;
 
         if (!selectedEmployeeId.HasValue)
         {
@@ -442,6 +468,8 @@
             isSelectedEmployeeClockedIn = false;
             todaysSegments = new();
             statusMessage = "Select an employee.";
+            showsOldOpenWarning = false;
+            lastClockInLocalString = null;
             return;
         }
 
@@ -449,11 +477,24 @@
             $"api/attendance/status/{selectedEmployeeId.Value}");
 
         isSelectedEmployeeClockedIn = status?.IsClockedIn ?? false;
+        showsOldOpenWarning = false;
+        lastClockInLocalString = null;
 
-        if (isSelectedEmployeeClockedIn && status?.LastClockInTime is DateTime utc)
+        if (isSelectedEmployeeClockedIn && status?.LastClockInTime is DateTime utcIn)
         {
-            var saTime = ToSaTime(utc);
-            statusMessage = $"Currently clocked in since {saTime:dd/MM/yyyy HH:mm}";
+            var saTime = ToSaTime(utcIn);
+            lastClockInLocalString = saTime.ToString("dd/MM/yyyy HH:mm");
+
+            if (saTime.Date < DateTime.Today)
+            {
+                // Open record from a previous day – show special warning
+                showsOldOpenWarning = true;
+                statusMessage = $"Currently clocked in since {lastClockInLocalString}. Please clock out first, then clock in for today.";
+            }
+            else
+            {
+                statusMessage = $"Currently clocked in since {lastClockInLocalString}.";
+            }
         }
         else
         {
