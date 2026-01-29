@@ -53,7 +53,6 @@ public class AttendanceService
         };
     }
 
-
     public async Task<bool> ClockInAsync(ClockRequestDto request, int clockedByEmployeeId)
     {
         using var transaction = await _context.Database.BeginTransactionAsync();
@@ -119,16 +118,19 @@ public class AttendanceService
     public async Task<List<AttendanceListItemDto>> GetTodayAsync()
     {
         var today = DateTime.UtcNow.Date;
-        return await GetByDateInternalAsync(today, null);
+        return await GetByDateInternalAsync(today, null, null);
     }
 
-    public async Task<List<AttendanceListItemDto>> GetByDateAsync(DateTime date, int? employeeId)
+    public async Task<List<AttendanceListItemDto>> GetByDateAsync(DateTime date, int? employeeId, int? departmentId)
     {
         var day = date.Date;
-        return await GetByDateInternalAsync(day, employeeId);
+        return await GetByDateInternalAsync(day, employeeId, departmentId);
     }
 
-    private async Task<List<AttendanceListItemDto>> GetByDateInternalAsync(DateTime dayLocal, int? employeeId)
+    private async Task<List<AttendanceListItemDto>> GetByDateInternalAsync(
+        DateTime dayLocal,
+        int? employeeId,
+        int? departmentId)
     {
         var startLocal = dayLocal.Date;
         var endLocal = startLocal.AddDays(1);
@@ -145,6 +147,11 @@ public class AttendanceService
         if (employeeId.HasValue && employeeId.Value > 0)
         {
             query = query.Where(a => a.EmployeeId == employeeId.Value);
+        }
+
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            query = query.Where(a => a.Employee.DepartmentId == departmentId.Value);
         }
 
         var records = await query

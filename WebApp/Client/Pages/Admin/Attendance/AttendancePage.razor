@@ -10,11 +10,23 @@
         <label class="form-label">Date</label>
         <InputDate @bind-Value="selectedDate" class="form-control" />
     </div>
+
+    <div class="col-md-3 col-6 mb-2">
+        <label class="form-label">Department</label>
+        <select class="form-select" @onchange="OnDepartmentChanged">
+            <option value="0">All departments</option>
+            @foreach (var d in departments)
+            {
+                <option value="@d.Id">@d.Name</option>
+            }
+        </select>
+    </div>
+
     <div class="col-md-4 col-6 mb-2">
         <label class="form-label">Employee</label>
         <select class="form-select" @bind="selectedEmployeeId">
             <option value="0">All employees</option>
-            @foreach (var e in employees)
+            @foreach (var e in filteredEmployees)
             {
                 <option value="@e.Id">@e.Name</option>
             }
@@ -26,6 +38,7 @@
             </button>
         }
     </div>
+
     <div class="col-md-2 col-6 mb-2 d-flex align-items-end">
         <button class="btn btn-primary w-100" @onclick="LoadRecords">Load</button>
     </div>
@@ -241,11 +254,17 @@ else
 
 @code {
     private List<AttendanceListItemDto>? records;
-    private List<EmployeeListItem> employees = new();
-    private List<EmployeeListItem> approvers = new();
+
+    // Reuse EmployeeDto from employees page
+    private List<EmployeeDto> employees = new();
+    private List<EmployeeDto> filteredEmployees = new();
+    private List<EmployeeDto> approvers = new();
+
+    private List<DepartmentDto> departments = new();
+    private int selectedDepartmentId = 0;
+
     private DateTime selectedDate = DateTime.Today;
     private int selectedEmployeeId = 0;
-
     private int selectedApproverId = 0;
 
     private AttendanceListItemDto? editing;
@@ -259,11 +278,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        employees = await Http.GetFromJsonAsync<List<EmployeeListItem>>("api/employees") ?? new();
+        departments = await Http.GetFromJsonAsync<List<DepartmentDto>>("api/departments") ?? new();
+        employees = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/employees") ?? new();
 
-        // Only admins can approve overtime
+        filteredEmployees = employees
+            .OrderBy(e => e.Name)
+            .ToList();
+
         approvers = employees
-            .Where(e => e.Role == "Admin")
+            .Where(e => string.Equals(e.Role, "Admin", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         await LoadRecords();
@@ -279,9 +302,43 @@ else
             url += $"&employeeId={selectedEmployeeId}";
         }
 
+        if (selectedDepartmentId > 0)
+        {
+            url += $"&departmentId={selectedDepartmentId}";
+        }
+
         records = await Http.GetFromJsonAsync<List<AttendanceListItemDto>>(url) ?? new();
         editing = null;
         editError = null;
+    }
+
+
+    private void OnDepartmentChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id) && id > 0)
+        {
+            selectedDepartmentId = id;
+        }
+        else
+        {
+            selectedDepartmentId = 0;
+        }
+
+        if (selectedDepartmentId == 0)
+        {
+            filteredEmployees = employees
+                .OrderBy(e => e.Name)
+                .ToList();
+        }
+        else
+        {
+            filteredEmployees = employees
+                .Where(e => e.DepartmentId == selectedDepartmentId)
+                .OrderBy(e => e.Name)
+                .ToList();
+        }
+
+        selectedEmployeeId = 0;
     }
 
     private static string GetInMapUrl(AttendanceListItemDto r)
@@ -481,13 +538,6 @@ else
     private string GetApproverName()
     {
         return approvers.FirstOrDefault(a => a.Id == selectedApproverId)?.Name ?? "Unknown";
-    }
-
-    public class EmployeeListItem
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string Role { get; set; } = string.Empty;
     }
 
     private async Task ClearTodayRecord()

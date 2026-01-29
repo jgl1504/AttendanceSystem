@@ -56,10 +56,11 @@ public class AttendanceController : ControllerBase
     [HttpGet("list")]
     public async Task<ActionResult<IEnumerable<AttendanceListItemDto>>> GetList(
         [FromQuery] DateTime date,
-        [FromQuery] int? employeeId)
+        [FromQuery] int? employeeId,
+        [FromQuery] int? departmentId)
     {
         var localDay = date.Date;
-        var records = await _attendanceService.GetByDateAsync(localDay, employeeId);
+        var records = await _attendanceService.GetByDateAsync(localDay, employeeId, departmentId);
         return Ok(records);
     }
 
