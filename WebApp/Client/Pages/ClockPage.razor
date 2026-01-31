@@ -45,6 +45,17 @@
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label">Site</label>
+                        <select class="form-select" @onchange="OnSiteChanged">
+                            <option value="">-- Select site --</option>
+                            @foreach (var site in activeSites)
+                            {
+                                <option value="@site.Id">@site.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input"
                                    type="radio"
@@ -103,6 +114,7 @@
                                     <tr>
                                         <th>In</th>
                                         <th>Out</th>
+                                        <th>Site</th>
                                         <th>Category</th>
                                         <th>Hours</th>
                                     </tr>
@@ -113,6 +125,7 @@
                                         <tr>
                                             <td>@s.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
                                             <td>@(s.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
+                                            <td>@(s.SiteName ?? "-")</td>
                                             <td>@s.WorkCategory</td>
                                             <td>@(s.HoursWorked?.ToString("0.00") ?? "-")</td>
                                         </tr>
@@ -154,6 +167,17 @@
                                         {
                                             <option value="@e.Id">@e.Name</option>
                                         }
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Site</label>
+                                <select class="form-select" @onchange="OnSiteChanged">
+                                    <option value="">-- Select site --</option>
+                                    @foreach (var site in activeSites)
+                                    {
+                                        <option value="@site.Id">@site.Name</option>
                                     }
                                 </select>
                             </div>
@@ -220,6 +244,7 @@
                                             <tr>
                                                 <th>In</th>
                                                 <th>Out</th>
+                                                <th>Site</th>
                                                 <th>Category</th>
                                                 <th>Hours</th>
                                             </tr>
@@ -230,6 +255,7 @@
                                                 <tr>
                                                     <td>@s.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
                                                     <td>@(s.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
+                                                    <td>@(s.SiteName ?? "-")</td>
                                                     <td>@s.WorkCategory</td>
                                                     <td>@(s.HoursWorked?.ToString("0.00") ?? "-")</td>
                                                 </tr>
@@ -289,6 +315,10 @@
     private List<AttendanceListItemDto> todaysSegments = new();
     private DateTime today = DateTime.Today;
 
+    // NEW: Site selection
+    private List<Site> activeSites = new();
+    private Guid? selectedSiteId;
+
     private DateTime ToSaTime(DateTime utc)
         => DateTime.SpecifyKind(utc, DateTimeKind.Utc).AddHours(2);
 
@@ -296,7 +326,14 @@
     {
         if (firstRender)
         {
-            isMobile = await JS.InvokeAsync<bool>("isMobileViewport");
+            try
+            {
+                isMobile = await JS.InvokeAsync<bool>("isMobileViewport");
+            }
+            catch
+            {
+                isMobile = false; // fallback to desktop
+            }
 
             departments = await Http.GetFromJsonAsync<List<DepartmentItem>>("api/departments")
                           ?? new();
@@ -312,6 +349,9 @@
                 .OrderBy(e => e.Name)
                 .ToList();
 
+            // NEW: Load active sites
+            activeSites = await Http.GetFromJsonAsync<List<Site>>("api/sites/active") ?? new();
+
             selectedDepartmentId = null;
             employees = allEmployees;
 
@@ -319,6 +359,7 @@
             StateHasChanged();
         }
     }
+
 
     private void OnDepartmentChanged(ChangeEventArgs e)
     {
@@ -384,6 +425,19 @@
         await RefreshStatusAndSegments();
     }
 
+    // NEW: Site selection handler
+    private void OnSiteChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var id))
+        {
+            selectedSiteId = id;
+        }
+        else
+        {
+            selectedSiteId = null;
+        }
+    }
+
     private void OnCategoryChanged(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
@@ -409,7 +463,8 @@
             EmployeeId = selectedEmployeeId.Value,
             Latitude = loc?.Latitude,
             Longitude = loc?.Longitude,
-            WorkCategory = selectedCategory
+            WorkCategory = selectedCategory,
+            SiteId = selectedSiteId  // NEW: Include selected site
         };
 
         var response = await Http.PostAsJsonAsync("api/attendance/clockin", request);
@@ -551,3 +606,4 @@
         public double Longitude { get; set; }
     }
 }
+

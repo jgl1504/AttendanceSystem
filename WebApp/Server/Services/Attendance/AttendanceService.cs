@@ -74,6 +74,7 @@ public class AttendanceService
             ClockInLatitude = request.Latitude,
             ClockInLongitude = request.Longitude,
             WorkCategory = request.WorkCategory,
+            SiteId = request.SiteId,  // NEW: Store selected site
             OvertimeStatus = OvertimeStatus.None,
             OvertimeLocation = null,
             OvertimeNote = null,
@@ -128,9 +129,9 @@ public class AttendanceService
     }
 
     private async Task<List<AttendanceListItemDto>> GetByDateInternalAsync(
-        DateTime dayLocal,
-        int? employeeId,
-        int? departmentId)
+    DateTime dayLocal,
+    int? employeeId,
+    int? departmentId)
     {
         var startLocal = dayLocal.Date;
         var endLocal = startLocal.AddDays(1);
@@ -142,6 +143,7 @@ public class AttendanceService
             .Include(a => a.Employee)
                 .ThenInclude(e => e.Department)
             .Include(a => a.OvertimeApprovedByEmployee)
+            .Include(a => a.Site)  // NEW: Include site data
             .Where(a => a.ClockInTime >= startUtc && a.ClockInTime < endUtc);
 
         if (employeeId.HasValue && employeeId.Value > 0)
@@ -308,6 +310,9 @@ public class AttendanceService
                 DriverHours = driverHours,
                 BreakdownHours = breakdownHours,
 
+                // NEW: Site info
+                SiteName = a.Site?.Name,
+
                 OvertimeLocation = a.OvertimeLocation,
                 OvertimeNote = a.OvertimeNote,
                 OvertimeApprovedByName = a.OvertimeApprovedByEmployee != null
@@ -396,7 +401,6 @@ public class AttendanceService
         await _context.SaveChangesAsync();
         return true;
     }
-
     public async Task<List<QuickEntryRowDto>> GetQuickEntryDataAsync(DateTime date)
     {
         var dayLocal = date.Date;
@@ -410,6 +414,7 @@ public class AttendanceService
             .ToListAsync();
 
         var attendanceRecords = await _context.AttendanceRecords
+            .Include(a => a.Site)
             .Where(a => a.ClockInTime >= startUtc && a.ClockInTime < endUtc)
             .ToListAsync();
 
@@ -470,6 +475,8 @@ public class AttendanceService
         return rows;
     }
 
+
+
     public async Task<bool> SaveQuickEntryAsync(int employeeId, DateTime date, string? clockInTime, string? clockOutTime, int clockedByEmployeeId)
     {
         var dayLocal = date.Date;
@@ -522,6 +529,7 @@ public class AttendanceService
                 ClockInTime = clockInUtc.Value,
                 ClockOutTime = clockOutUtc,
                 WorkCategory = WorkCategory.Normal,
+                SiteId = null,  // Quick entry doesn't capture site
                 OvertimeStatus = OvertimeStatus.None,
                 OvertimeLocation = null,
                 OvertimeNote = null,
@@ -562,3 +570,5 @@ public class AttendanceService
     public Task<int> SaveChangesAsync()
         => _context.SaveChangesAsync();
 }
+
+

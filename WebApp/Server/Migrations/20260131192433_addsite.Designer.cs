@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WebApp.Server.Data;
 
@@ -11,9 +12,11 @@ using WebApp.Server.Data;
 namespace WebApp.Server.Migrations
 {
     [DbContext(typeof(DataContext))]
-    partial class DataContextModelSnapshot : ModelSnapshot
+    [Migration("20260131192433_addsite")]
+    partial class addsite
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -143,15 +146,15 @@ namespace WebApp.Server.Migrations
                         {
                             Id = "seed-admin-user-id",
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "141749b9-c441-46ba-a8ae-ff3ea64c24a9",
+                            ConcurrencyStamp = "ee1eee8a-c835-438f-9dfb-9ad25cc6c8e3",
                             Email = "Projects@aics.co.za",
                             EmailConfirmed = true,
                             LockoutEnabled = false,
                             NormalizedEmail = "PROJECTS@AICS.CO.ZA",
                             NormalizedUserName = "PROJECTS@AICS.CO.ZA",
-                            PasswordHash = "AQAAAAIAAYagAAAAEDVglRXg1O4hpM3pgDZlRTl69K5JJDHJee697806reRWtk/ber858NnwYQPw1gRwgA==",
+                            PasswordHash = "AQAAAAIAAYagAAAAEO/GwaMT+0GfLHvaGZIGp+/KrgqqTI0p5UVNLl9Yzn+/rGCr+aMRpiKvYbMibCgwUw==",
                             PhoneNumberConfirmed = false,
-                            SecurityStamp = "a78bc67f-f87d-4705-bf9b-ed1ab1acdefc",
+                            SecurityStamp = "de9fdb9c-5ea3-42cf-9d08-aeea39fb2b0f",
                             TwoFactorEnabled = false,
                             UserName = "Projects@aics.co.za"
                         });
@@ -295,9 +298,6 @@ namespace WebApp.Server.Migrations
                     b.Property<int>("OvertimeStatus")
                         .HasColumnType("int");
 
-                    b.Property<Guid?>("SiteId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<double?>("SundayPublicOvertimeHours")
                         .HasColumnType("float");
 
@@ -314,8 +314,6 @@ namespace WebApp.Server.Migrations
                     b.HasIndex("EmployeeId");
 
                     b.HasIndex("OvertimeApprovedByEmployeeId");
-
-                    b.HasIndex("SiteId");
 
                     b.ToTable("AttendanceRecords");
                 });
@@ -724,17 +722,11 @@ namespace WebApp.Server.Migrations
                         .WithMany()
                         .HasForeignKey("OvertimeApprovedByEmployeeId");
 
-                    b.HasOne("WebApp.Shared.Model.Site", "Site")
-                        .WithMany()
-                        .HasForeignKey("SiteId");
-
                     b.Navigation("ClockedByEmployee");
 
                     b.Navigation("Employee");
 
                     b.Navigation("OvertimeApprovedByEmployee");
-
-                    b.Navigation("Site");
                 });
 
             modelBuilder.Entity("WebApp.Shared.Model.Employee", b =>

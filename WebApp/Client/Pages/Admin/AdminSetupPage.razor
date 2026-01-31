@@ -1,0 +1,85 @@
+﻿@page "/admin/setup"
+
+<PageTitle>Admin Setup</PageTitle>
+
+<h2>System Setup</h2>
+
+<div class="row g-3 mt-3">
+
+    <!-- Attendance / Sites -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Attendance</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Sites</div>
+                        <small class="text-muted">Clock-in locations (branches, depots, sites)</small>
+                    </div>
+                    <a href="/admin/sites" class="btn btn-sm btn-outline-primary">Manage</a>
+                </li>
+                <li class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Departments</div>
+                        <small class="text-muted">Expected hours, weekends, overtime rules</small>
+                    </div>
+                    <a href="/admin/departments" class="btn btn-sm btn-outline-primary">Manage</a>
+                </li>
+                <li class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Employees</div>
+                        <small class="text-muted">Active staff, department assignment</small>
+                    </div>
+                    <a href="/admin/employees" class="btn btn-sm btn-outline-primary">Manage</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Leave -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Leave</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Leave Types</div>
+                        <small class="text-muted">Annual, sick, unpaid, special</small>
+                    </div>
+                    <a href="/admin/leave/setup" class="btn btn-sm btn-outline-primary">Manage</a>
+                </li>
+                <li class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Leave Admin</div>
+                        <small class="text-muted">Approve, adjust, and view requests</small>
+                    </div>
+                    <a href="/admin/leave" class="btn btn-sm btn-outline-primary">Open</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Core data / parameters -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Core Data</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Work Categories</div>
+                        <small class="text-muted">Normal, driver, breakdown definitions</small>
+                    </div>
+                    <a href="/admin/workcategories" class="btn btn-sm btn-outline-primary">Manage</a>
+                </li>
+                <li class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Global Parameters</div>
+                        <small class="text-muted">Public holidays, default hours, rules</small>
+                    </div>
+                    <a href="/admin/settings" class="btn btn-sm btn-outline-primary">Manage</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+</div>

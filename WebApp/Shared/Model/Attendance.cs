@@ -18,6 +18,10 @@
         public double? ClockOutLatitude { get; set; }
         public double? ClockOutLongitude { get; set; }
 
+        // Site selection
+        public Guid? SiteId { get; set; }
+        public Site? Site { get; set; }
+
         // New: segment category (Normal/Driver/Breakdown)
         public WorkCategory WorkCategory { get; set; } = WorkCategory.Normal;
 

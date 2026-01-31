@@ -15,6 +15,9 @@
 
         // New: segment category (Normal / Driver / Breakdown)
         public WorkCategory WorkCategory { get; set; } = WorkCategory.Normal;
+
+        // NEW: Selected site
+        public Guid? SiteId { get; set; }
     }
 
     public class AttendanceListItemDto
@@ -46,9 +49,13 @@
         // New: category of this record if you show segments in a flat list
         public WorkCategory WorkCategory { get; set; } = WorkCategory.Normal;
 
+        // NEW: Site name for display
+        public Guid? SiteId { get; set; }
+        public string? SiteName { get; set; }
+
         // New overtime detail fields for approval UI
         public string? OvertimeLocation { get; set; }          // where overtime happened (e.g. Dischem)
-        public string? OvertimeNote { get; set; }              // approver’s free-text message
+        public string? OvertimeNote { get; set; }              // approver's free-text message
         public string? OvertimeApprovedByName { get; set; }    // who approved/rejected
         public DateTime? OvertimeDecisionTime { get; set; }    // when decision was made
 

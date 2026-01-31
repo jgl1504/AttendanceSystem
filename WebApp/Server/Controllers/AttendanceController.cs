@@ -235,4 +235,25 @@ public class AttendanceController : ControllerBase
 
         return Ok(new { message = "Today's record(s) cleared." });
     }
+
+    [HttpPut("update-site")]
+    public async Task<IActionResult> UpdateSite([FromBody] UpdateSiteDto dto)
+    {
+        var record = await _attendanceService.GetRecordForDecisionAsync(dto.Id);
+        if (record is null)
+            return NotFound();
+
+        record.SiteId = dto.SiteId;
+        await _attendanceService.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    // DTO for site update
+    public class UpdateSiteDto
+    {
+        public int Id { get; set; }
+        public Guid? SiteId { get; set; }
+    }
+
 }

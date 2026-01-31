@@ -18,6 +18,7 @@ public class DataContext : IdentityDbContext<IdentityUser>
     public DbSet<AttendanceRecord> AttendanceRecords { get; set; } = default!;
     public DbSet<EmployeeLeave> EmployeeLeaves { get; set; } = default!;
     public DbSet<LeaveRecord> LeaveRecords { get; set; } = default!;
+    public DbSet<Site> Sites { get; set; } = default!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

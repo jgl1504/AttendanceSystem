@@ -1,0 +1,204 @@
+﻿@page "/admin/sites"
+
+@using WebApp.Shared.Model
+@inject HttpClient Http
+
+<PageTitle>Sites</PageTitle>
+
+<h2>Sites</h2>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <EditForm Model="@editSite" OnValidSubmit="@SaveSite">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Name</label>
+                <InputText class="form-control" @bind-Value="editSite.Name" />
+                <ValidationMessage For="@(() => editSite.Name)" />
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Address</label>
+                <InputText class="form-control" @bind-Value="editSite.Address" />
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Active</label>
+                <div class="form-check mt-2">
+                    <InputCheckbox class="form-check-input" @bind-Value="editSite.IsActive" />
+                </div>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Preferred Map</label>
+                <InputSelect class="form-select" @bind-Value="editSite.PreferredMapApp">
+                    <option value="">(none)</option>
+                    <option value="Google">Google Maps</option>
+                    <option value="Waze">Waze</option>
+                </InputSelect>
+            </div>
+
+            <!-- Coordinates -->
+            <div class="col-md-3">
+                <label class="form-label">Latitude</label>
+                <InputNumber class="form-control" @bind-Value="editSite.Latitude" TValue="double?" />
+                <small class="text-muted">e.g., -26.1050</small>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Longitude</label>
+                <InputNumber class="form-control" @bind-Value="editSite.Longitude" TValue="double?" />
+                <small class="text-muted">e.g., 27.7707</small>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Map URL (optional)</label>
+                <InputText class="form-control" @bind-Value="editSite.MapUrl" placeholder="https://maps.app.goo.gl/..." />
+            </div>
+
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary me-2">
+                    @(editSite.Id == Guid.Empty ? "Add Site" : "Save Changes")
+                </button>
+                @if (editSite.Id != Guid.Empty)
+                {
+                    <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+                }
+            </div>
+        </div>
+    </EditForm>
+
+    <hr />
+
+    <h4>Existing Sites</h4>
+
+    @if (sites is null || !sites.Any())
+    {
+        <p class="text-muted">No sites configured yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                    <th>Active</th>
+                    <th>Preferred Map</th>
+                    <th style="width: 150px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in sites)
+                {
+                    <tr class="@(!s.IsActive ? "table-secondary" : null)">
+                        <td>@s.Name</td>
+                        <td>@s.Address</td>
+                        <td>@(s.Latitude?.ToString("F6") ?? "-")</td>
+                        <td>@(s.Longitude?.ToString("F6") ?? "-")</td>
+                        <td>@(s.IsActive ? "Yes" : "No")</td>
+                        <td>@(string.IsNullOrEmpty(s.PreferredMapApp) ? "-" : s.PreferredMapApp)</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => StartEdit(s)">
+                                Edit
+                            </button>
+                            @if (s.IsActive)
+                            {
+                                <button class="btn btn-sm btn-outline-warning" @onclick="() => Deactivate(s)">
+                                    Deactivate
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-success" @onclick="() => Activate(s)">
+                                    Activate
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private List<Site> sites = new();
+    private Site editSite = new Site { Id = Guid.Empty, IsActive = true };  // Force empty ID
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSites();
+    }
+
+    private async Task LoadSites()
+    {
+        isLoading = true;
+        sites = await Http.GetFromJsonAsync<List<Site>>("api/sites") ?? new List<Site>();
+        isLoading = false;
+    }
+
+    private void StartEdit(Site s)
+    {
+        editSite = new Site
+        {
+            Id = s.Id,
+            Name = s.Name,
+            Address = s.Address,
+            Latitude = s.Latitude,
+            Longitude = s.Longitude,
+            MapUrl = s.MapUrl,
+            PreferredMapApp = s.PreferredMapApp,
+            IsActive = s.IsActive
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editSite = new Site { Id = Guid.Empty, IsActive = true };  // Force empty ID
+    }
+
+    private async Task SaveSite()
+    {
+        if (editSite.Id == Guid.Empty)
+        {
+            // create - POST
+            var response = await Http.PostAsJsonAsync("api/sites", editSite);
+            response.EnsureSuccessStatusCode();
+        }
+        else
+        {
+            // update - PUT
+            var response = await Http.PutAsJsonAsync($"api/sites/{editSite.Id}", editSite);
+            response.EnsureSuccessStatusCode();
+        }
+
+        editSite = new Site { Id = Guid.Empty, IsActive = true };  // Force empty ID
+        await LoadSites();
+    }
+
+    private async Task Deactivate(Site s)
+    {
+        s.IsActive = false;
+        await Http.PutAsJsonAsync($"api/sites/{s.Id}", s);
+        await LoadSites();
+    }
+
+    private async Task Activate(Site s)
+    {
+        s.IsActive = true;
+        await Http.PutAsJsonAsync($"api/sites/{s.Id}", s);
+        await LoadSites();
+    }
+}
+

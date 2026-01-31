@@ -66,6 +66,9 @@ builder.Services.AddScoped<DepartmentService>();
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<LeaveService>();
+builder.Services.AddScoped<SiteService>();
+
+
 builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
