@@ -426,9 +426,17 @@ else
         editError = null;
 
         // Scroll to edit form after render
-        await Task.Delay(100);
-        await JS.InvokeVoidAsync("scrollToElement", "#attendance-edit-form");
+        try
+        {
+            await Task.Delay(100);
+            await JS.InvokeVoidAsync("scrollToElement", "#attendance-edit-form");
+        }
+        catch
+        {
+            // Scroll failed, ignore
+        }
     }
+
 
     private void CancelEdit()
     {
