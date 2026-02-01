@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using WebApp.Server.Services.Leave;
 using WebApp.Shared.Model;
 
@@ -69,6 +70,19 @@ public class LeaveController : ControllerBase
         return Ok();
     }
 
+    // NEW: POST api/leave/{id}/attachment  (multipart/form-data)
+    [HttpPost("{id:int}/attachment")]
+    public async Task<ActionResult> UploadAttachment(int id, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "No file uploaded." });
+
+        var ok = await _leaveRequestService.SaveAttachmentAsync(id, file);
+        if (!ok) return BadRequest(new { message = "Unable to save attachment." });
+
+        return Ok();
+    }
+
     // POST api/leave/approve/10
     [HttpPost("approve/{id:int}")]
     public async Task<ActionResult> Approve(int id)
@@ -118,4 +132,14 @@ public class LeaveController : ControllerBase
         if (!ok) return BadRequest(new { message = "Failed to save leave setup." });
         return Ok();
     }
+
+    // POST api/leave/change-type/10
+    [HttpPost("change-type/{id:int}")]
+    public async Task<ActionResult> ChangeType(int id, [FromBody] Guid newLeaveTypeId)
+    {
+        var ok = await _leaveRequestService.ChangeLeaveTypeAsync(id, newLeaveTypeId);
+        if (!ok) return BadRequest(new { message = "Unable to change leave type." });
+        return Ok();
+    }
+
 }

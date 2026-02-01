@@ -303,12 +303,236 @@ else
         </table>
     }
 
-    <!-- help cards unchanged -->
     <hr class="my-5" />
 
     <div class="container">
-        <!-- (keep all your existing help cards here, unchanged) -->
-        @* ... help content omitted for brevity ... *@
+        <h4>Leave Type Configuration Guide</h4>
+        <p class="text-muted mb-4">Understanding how to set up leave types with examples</p>
+
+        <div class="card mb-3">
+            <div class="card-header" style="cursor: pointer;" @onclick="() => showPoolHelp = !showPoolHelp">
+                <strong>Pool Type</strong> - Where does this leave deduct from?
+                <span class="float-end">@(showPoolHelp ? "▼" : "▶")</span>
+            </div>
+            @if (showPoolHelp)
+            {
+                <div class="card-body">
+                    <dl>
+                        <dt>Own Pool</dt>
+                        <dd>
+                            Leave type has its own separate balance that is tracked independently.
+                            <br><strong>Example:</strong> Annual Leave (15 days), Sick Leave (30 days/3 years)
+                        </dd>
+
+                        <dt>Uses Another Pool</dt>
+                        <dd>
+                            This leave type deducts from a different leave type's balance.
+                            <br><strong>Example:</strong> Study Leave → deducts from Annual Leave pool
+                            <br><em>Use case:</em> Employee takes 3 days Study Leave, their Annual Leave balance decreases by 3 days
+                        </dd>
+
+                        <dt>Unlimited</dt>
+                        <dd>
+                            No balance tracking - can be taken without limits (subject to approval).
+                            <br><strong>Example:</strong> Bereavement Leave (compassionate leave for family death)
+                        </dd>
+
+                        <dt>One-Time Allocation</dt>
+                        <dd>
+                            A fixed amount given once per qualifying event, not recurring annually.
+                            <br><strong>Example:</strong> Maternity Leave (120 days per pregnancy), Paternity Leave (10 days per child birth)
+                        </dd>
+                    </dl>
+                </div>
+            }
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header" style="cursor: pointer;" @onclick="() => showAccrualHelp = !showAccrualHelp">
+                <strong>Accrual Type</strong> - How does leave accumulate?
+                <span class="float-end">@(showAccrualHelp ? "▼" : "▶")</span>
+            </div>
+            @if (showAccrualHelp)
+            {
+                <div class="card-body">
+                    <dl>
+                        <dt>Annual</dt>
+                        <dd>
+                            Leave accrues continuously throughout the year (monthly).
+                            <br><strong>Example:</strong> Annual Leave - 15 days per year = 1.25 days per month
+                            <br><em>Timeline:</em> Jan 1: 0 days → Feb 1: 1.25 days → Mar 1: 2.5 days → Dec 31: 15 days
+                        </dd>
+
+                        <dt>Cycle</dt>
+                        <dd>
+                            Fixed amount per multi-year cycle (South African sick leave rule).
+                            <br><strong>Example:</strong> Sick Leave - 30 days per 36-month cycle
+                            <br><em>Timeline:</em> Jan 2026: 30 days → Jan 2029: reset to 30 days (new cycle)
+                            <br>Set: Days Per Cycle = 30, Cycle Duration = 36 months
+                        </dd>
+
+                        <dt>Fixed</dt>
+                        <dd>
+                            One-time fixed allocation per qualifying event.
+                            <br><strong>Example:</strong> Maternity Leave - 120 days (4 months) per pregnancy
+                            <br>Set: Days Per Year = 120
+                        </dd>
+
+                        <dt>Unlimited</dt>
+                        <dd>
+                            No limit on days - purely approval-based.
+                            <br><strong>Example:</strong> Bereavement Leave (compassionate leave)
+                        </dd>
+
+                        <dt>None</dt>
+                        <dd>
+                            No accrual tracking (typically for unpaid leave).
+                            <br><strong>Example:</strong> Unpaid Leave - no balance, admin just approves duration
+                        </dd>
+                    </dl>
+                </div>
+            }
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header" style="cursor: pointer;" @onclick="() => showExamplesHelp = !showExamplesHelp">
+                <strong>Real-World Examples</strong>
+                <span class="float-end">@(showExamplesHelp ? "▼" : "▶")</span>
+            </div>
+            @if (showExamplesHelp)
+            {
+                <div class="card-body">
+                    <h6>Annual Leave Setup:</h6>
+                    <ul>
+                        <li>Pool Type: <strong>Own Pool</strong></li>
+                        <li>Accrual Type: <strong>Annual</strong></li>
+                        <li>Days Per Year: <strong>15</strong></li>
+                        <li>Allows Carryover: <strong>Yes</strong>, Max 5 days</li>
+                        <li>Requires Document: <strong>No</strong></li>
+                        <li>Min Notice Days: <strong>14</strong> (2 weeks)</li>
+                    </ul>
+                    <p><em>How it works:</em> John starts Jan 1 with 0 days. By July 1 (6 months), he has 7.5 days. He takes 5 days in August, leaving 2.5 days. By Dec 31, he has 10 days (2.5 + 7.5 more accrued). If unused, 5 days carry to next year.</p>
+
+                    <hr>
+
+                    <h6>Sick Leave Setup (BCEA Compliant):</h6>
+                    <ul>
+                        <li>Pool Type: <strong>Own Pool</strong></li>
+                        <li>Accrual Type: <strong>Cycle</strong></li>
+                        <li>Days Per Cycle: <strong>30</strong></li>
+                        <li>Cycle Duration: <strong>36 months</strong></li>
+                        <li>Requires Document: <strong>Yes</strong> (medical certificate)</li>
+                        <li>Min Notice Days: <strong>0</strong> (emergencies)</li>
+                    </ul>
+                    <p><em>How it works:</em> Sarah gets 30 sick days on Jan 1, 2026. She uses 8 days in Year 1, 5 days in Year 2, 10 days in Year 3 (23 total). On Jan 1, 2029, cycle resets and she gets a fresh 30 days.</p>
+
+                    <hr>
+
+                    <h6>Study Leave (Uses Annual Pool):</h6>
+                    <ul>
+                        <li>Pool Type: <strong>Uses Another Pool</strong></li>
+                        <li>Deduct From Pool: <strong>Annual Leave</strong></li>
+                        <li>Accrual Type: <strong>None</strong></li>
+                        <li>Requires Document: <strong>Yes</strong> (proof of exam/course)</li>
+                        <li>Min Notice Days: <strong>14</strong></li>
+                    </ul>
+                    <p><em>How it works:</em> Peter has 10 days Annual Leave. He requests 3 days Study Leave for exams. After approval, his Annual Leave balance drops to 7 days. Study Leave doesn't have its own pool.</p>
+
+                    <hr>
+
+                    <h6>Family Responsibility Leave (with Fallback):</h6>
+                    <ul>
+                        <li>Pool Type: <strong>Own Pool</strong></li>
+                        <li>Accrual Type: <strong>Annual</strong></li>
+                        <li>Days Per Year: <strong>3</strong></li>
+                        <li>Fallback Pool: <strong>Annual Leave</strong></li>
+                        <li>Allows Carryover: <strong>No</strong></li>
+                    </ul>
+                    <p><em>How it works:</em> Maria gets 3 Family Responsibility days per year. She uses all 3 days. Later, she needs 2 more days for a family emergency. System automatically deducts those 2 days from her Annual Leave balance (fallback).</p>
+
+                    <hr>
+
+                    <h6>Bereavement (Compassionate) Leave:</h6>
+                    <ul>
+                        <li>Pool Type: <strong>Own Pool</strong> or <strong>Unlimited</strong> (policy choice)</li>
+                        <li>Accrual Type: <strong>None</strong> or <strong>Annual</strong> (e.g., 3–5 days per year)</li>
+                        <li>Requires Document: <strong>Yes</strong> (death certificate / funeral program, if required)</li>
+                        <li>Min Notice Days: <strong>0</strong> (emergencies)</li>
+                    </ul>
+                    <p><em>How it works:</em> When an employee loses a close family member, they can take a few days off to attend the funeral and grieve. Your policy can define whether this is paid, how many days are allowed, and which family relationships qualify.</p>
+
+                    <hr>
+
+                    <h6>Maternity Leave (One-Time):</h6>
+                    <ul>
+                        <li>Pool Type: <strong>One-Time Allocation</strong></li>
+                        <li>Accrual Type: <strong>Fixed</strong></li>
+                        <li>Days Per Year: <strong>120</strong> (4 months)</li>
+                        <li>Gender Specific: <strong>Yes - Female</strong></li>
+                        <li>Payment %: <strong>66%</strong> (UIF pays this portion)</li>
+                        <li>Requires Document: <strong>Yes</strong> (maternity certificate)</li>
+                    </ul>
+                    <p><em>How it works:</em> When Lucy applies for maternity leave, she gets 120 days allocated for that pregnancy. This is a one-time grant, not recurring annually. UIF pays 66% of her salary during this period.</p>
+
+                    <hr>
+
+                    <h6>Unpaid Leave:</h6>
+                    <ul>
+                        <li>Pool Type: <strong>Own Pool</strong></li>
+                        <li>Accrual Type: <strong>None</strong></li>
+                        <li>Is Paid: <strong>No</strong></li>
+                        <li>Payment %: <strong>0%</strong></li>
+                    </ul>
+                    <p><em>How it works:</em> David requests 5 days unpaid leave to travel. No balance is tracked - admin just approves the duration. David receives no pay for those 5 days.</p>
+                </div>
+            }
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header" style="cursor: pointer;" @onclick="() => showFieldHelp = !showFieldHelp">
+                <strong>Field Descriptions</strong>
+                <span class="float-end">@(showFieldHelp ? "▼" : "▶")</span>
+            </div>
+            @if (showFieldHelp)
+            {
+                <div class="card-body">
+                    <dl>
+                        <dt>Requires Supporting Document</dt>
+                        <dd>If enabled, employees must upload proof (medical certificate, death certificate, exam proof, etc.) when requesting this leave type.</dd>
+
+                        <dt>Min Notice Days</dt>
+                        <dd>
+                            Minimum advance notice required. 0 = can be requested same-day (emergencies). 14 = must request 2 weeks in advance.
+                            <br><strong>Example:</strong> Annual Leave = 14 days notice, Sick Leave = 0 days (emergencies)
+                        </dd>
+
+                        <dt>Max Consecutive Days</dt>
+                        <dd>
+                            Maximum continuous days allowed in one request. 0 = unlimited.
+                            <br><strong>Example:</strong> Bereavement = 5 days maximum per request
+                        </dd>
+
+                        <dt>Payment Percentage</dt>
+                        <dd>
+                            Percentage of salary paid during leave. 100% = full pay, 66% = UIF portion, 0% = unpaid.
+                            <br><strong>Example:</strong> Maternity = 66% (UIF), Annual = 100%, Unpaid = 0%
+                        </dd>
+
+                        <dt>Gender Specific</dt>
+                        <dd>
+                            If enabled, only employees of the specified gender can request this leave type.
+                            <br><strong>Example:</strong> Maternity = Female only, Paternity = Male only
+                        </dd>
+
+                        <dt>Allows Carryover</dt>
+                        <dd>
+                            If enabled, unused days roll over to next year (up to Max Carryover Days).
+                            <br><strong>Example:</strong> Annual Leave: carry 5 unused days to next year. Sick Leave: no carryover (resets per cycle).
+                        </dd>
+                    </dl>
+                </div>
+            }
+        </div>
     </div>
 }
 

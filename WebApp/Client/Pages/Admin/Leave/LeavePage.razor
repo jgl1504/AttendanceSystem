@@ -25,7 +25,7 @@ else
                 <th>Portion</th>
                 <th>Type</th>
                 <th>Requested</th>
-                <th>Reason</th>
+                <th>Reason / Comment</th>
                 <th>Balance</th>
                 <th>Proof</th>
                 <th></th>
@@ -42,9 +42,22 @@ else
                     <td>@r.EndDate.ToString("yyyy-MM-dd")</td>
                     <td>@r.DaysTaken</td>
                     <td>@r.Portion</td>
-                    <td>@r.LeaveTypeName</td>
+                    <td>
+                        <select class="form-select form-select-sm"
+                                @onchange="e => ChangeType(r, e)">
+                            @foreach (var lt in leaveTypes)
+                            {
+                                <option value="@lt.Id" selected="@(lt.Id == r.LeaveTypeId)">
+                                    @lt.Name
+                                </option>
+                            }
+                        </select>
+                    </td>
                     <td>@r.RequestedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                    <td>@r.Reason</td>
+                    <td>
+                        <input class="form-control form-control-sm"
+                               @bind="r.Reason" />
+                    </td>
                     <td>
                         @if (balances.TryGetValue(balanceKey, out var b))
                         {
@@ -80,8 +93,8 @@ else
                         }
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-success me-1" @onclick="() => Approve(r.Id)">Approve</button>
-                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Reject(r.Id)">Reject</button>
+                        <button class="btn btn-sm btn-success me-1" @onclick="() => Approve(r)">Approve</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Reject(r)">Reject</button>
                     </td>
                 </tr>
             }
@@ -91,6 +104,7 @@ else
 
 @code {
     private List<LeaveRecordDto>? pending;
+    private List<LeaveType> leaveTypes = new();
 
     // Cache per employee+leaveType
     private readonly Dictionary<string, LeaveBalanceSummaryDto> balances = new();
@@ -98,6 +112,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         await LoadPending();
+        leaveTypes = await Http.GetFromJsonAsync<List<LeaveType>>("api/leavetypes/active") ?? new();
     }
 
     private async Task LoadPending()
@@ -128,12 +143,38 @@ else
         }
     }
 
-    private async Task Approve(int id)
+    private async Task ChangeType(LeaveRecordDto record, ChangeEventArgs e)
+    {
+        if (!Guid.TryParse(e.Value?.ToString(), out var newTypeId))
+            return;
+
+        var newTypeName = leaveTypes.FirstOrDefault(x => x.Id == newTypeId)?.Name ?? "this type";
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Change leave type to {newTypeName}?");
+        if (!ok) return;
+
+        var response = await Http.PostAsJsonAsync($"api/leave/change-type/{record.Id}", newTypeId);
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to change leave type.");
+            return;
+        }
+
+        // update in-memory record
+        record.LeaveTypeId = newTypeId;
+        record.LeaveTypeName = newTypeName;
+
+        // clear cached balance for this key
+        balances.Remove(GetBalanceKey(record.EmployeeId, record.LeaveTypeId));
+
+        StateHasChanged();
+    }
+
+    private async Task Approve(LeaveRecordDto r)
     {
         var ok = await JS.InvokeAsync<bool>("confirm", "Approve this leave request?");
         if (!ok) return;
 
-        var response = await Http.PostAsync($"api/leave/approve/{id}", null);
+        var response = await Http.PostAsJsonAsync($"api/leave/approve/{r.Id}", r.Reason ?? string.Empty);
         if (!response.IsSuccessStatusCode)
         {
             await JS.InvokeVoidAsync("alert", "Failed to approve.");
@@ -143,12 +184,12 @@ else
         await LoadPending();
     }
 
-    private async Task Reject(int id)
+    private async Task Reject(LeaveRecordDto r)
     {
         var ok = await JS.InvokeAsync<bool>("confirm", "Reject this leave request?");
         if (!ok) return;
 
-        var response = await Http.PostAsync($"api/leave/reject/{id}", null);
+        var response = await Http.PostAsJsonAsync($"api/leave/reject/{r.Id}", r.Reason ?? string.Empty);
         if (!response.IsSuccessStatusCode)
         {
             await JS.InvokeVoidAsync("alert", "Failed to reject.");

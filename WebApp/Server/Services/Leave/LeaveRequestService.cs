@@ -1,4 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.IO;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using WebApp.Server.Configuration;
 using WebApp.Server.Data;
 using WebApp.Shared.Model;
 
@@ -7,10 +10,12 @@ namespace WebApp.Server.Services.Leave
     public class LeaveRequestService
     {
         private readonly DataContext _context;
+        private readonly LeaveAttachmentsOptions _attachmentOptions;
 
-        public LeaveRequestService(DataContext context)
+        public LeaveRequestService(DataContext context, IOptions<LeaveAttachmentsOptions> attachmentOptions)
         {
             _context = context;
+            _attachmentOptions = attachmentOptions.Value;
         }
 
         // Request leave WITHOUT attachment (same logic as before)
@@ -74,6 +79,66 @@ namespace WebApp.Server.Services.Leave
 
             return true;
         }
+
+        // NEW: Save attachment file to disk and update LeaveRecord
+        public async Task<bool> SaveAttachmentAsync(int leaveRecordId, IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return false;
+
+            var record = await _context.LeaveRecords
+                .FirstOrDefaultAsync(r => r.Id == leaveRecordId);
+
+            if (record == null)
+                return false;
+
+            var root = _attachmentOptions.RootPath;
+            if (string.IsNullOrWhiteSpace(root))
+                return false;
+
+            Directory.CreateDirectory(root);
+
+            var safeFileName = $"{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
+            var fullPath = Path.Combine(root, safeFileName);
+
+            using (var stream = new FileStream(fullPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            record.AttachmentFileName = safeFileName;
+            record.AttachmentPath = null; // we only store file name now, path comes from config
+            //record.UpdatedAt = DateTime.UtcNow;
+
+            _context.LeaveRecords.Update(record);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> ChangeLeaveTypeAsync(int leaveRecordId, Guid newLeaveTypeId)
+        {
+            var record = await _context.LeaveRecords
+                .Include(r => r.LeaveType)
+                .FirstOrDefaultAsync(r => r.Id == leaveRecordId);
+
+            if (record == null || record.Status != LeaveStatus.Pending)
+                return false;
+
+            var newType = await _context.LeaveTypes
+                .FirstOrDefaultAsync(t => t.Id == newLeaveTypeId && !t.IsDeleted && t.IsActive);
+
+            if (newType == null)
+                return false;
+
+            record.LeaveTypeId = newLeaveTypeId;
+            // Optionally update cached name if you keep it on the entity
+            // record.LeaveTypeName = newType.Name;
+
+            _context.LeaveRecords.Update(record);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
 
         public async Task<string?> GetAttachmentFileNameAsync(int leaveRecordId)
         {

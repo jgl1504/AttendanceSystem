@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using WebApp.Server.Configuration;
 using WebApp.Server.Data;
 using WebApp.Server.Services;
 using WebApp.Server.Services.Attendance;
@@ -71,6 +72,10 @@ builder.Services.AddScoped<LeaveTypeService>();
 builder.Services.AddScoped<LeaveBalanceService>();
 builder.Services.AddScoped<LeaveService>();
 builder.Services.AddScoped<LeaveRequestService>();
+
+builder.Services.Configure<LeaveAttachmentsOptions>(
+    builder.Configuration.GetSection("LeaveAttachments"));
+
 
 
 

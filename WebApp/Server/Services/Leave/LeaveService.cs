@@ -140,7 +140,7 @@ namespace WebApp.Server.Services.Leave
 
             await _context.SaveChangesAsync();
             return true;
-        }
+        }       
 
         // ===== PER-TYPE BALANCE SUMMARY FOR ADMIN (by LeaveType) =====
 
