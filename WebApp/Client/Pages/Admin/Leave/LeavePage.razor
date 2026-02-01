@@ -26,6 +26,7 @@ else
                 <th>Type</th>
                 <th>Requested</th>
                 <th>Reason</th>
+                <th>Balance</th>
                 <th>Proof</th>
                 <th></th>
             </tr>
@@ -33,23 +34,45 @@ else
         <tbody>
             @foreach (var r in pending)
             {
+                var balanceKey = GetBalanceKey(r.EmployeeId, r.LeaveTypeId);
+
                 <tr>
                     <td>@r.EmployeeName</td>
                     <td>@r.StartDate.ToString("yyyy-MM-dd")</td>
                     <td>@r.EndDate.ToString("yyyy-MM-dd")</td>
                     <td>@r.DaysTaken</td>
                     <td>@r.Portion</td>
-                    <td>@r.LeaveType</td>
+                    <td>@r.LeaveTypeName</td>
                     <td>@r.RequestedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                     <td>@r.Reason</td>
                     <td>
-                        @if ((r.LeaveType == LeaveType.Sick || r.LeaveType == LeaveType.FamilyResponsibility)
-                                        && !string.IsNullOrWhiteSpace(r.AttachmentFileName))
+                        @if (balances.TryGetValue(balanceKey, out var b))
+                        {
+                            <span class="small">
+                                @b.LeaveTypeName:
+                                @b.Remaining @(" left, requested ") @r.DaysTaken
+                                @(" (of ") @b.TotalEntitlement @(" total)")
+                            </span>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-info"
+                                    @onclick="() => LoadBalance(r)">
+                                Load
+                            </button>
+                        }
+                    </td>
+                    <td>
+                        @if (r.RequiresDocument && !string.IsNullOrWhiteSpace(r.AttachmentFileName))
                         {
                             <button class="btn btn-sm btn-outline-secondary"
                                     @onclick="() => ViewAttachment(r.Id)">
                                 View
                             </button>
+                        }
+                        else if (r.RequiresDocument)
+                        {
+                            <span class="text-warning small">Required</span>
                         }
                         else
                         {
@@ -69,6 +92,9 @@ else
 @code {
     private List<LeaveRecordDto>? pending;
 
+    // Cache per employee+leaveType
+    private readonly Dictionary<string, LeaveBalanceSummaryDto> balances = new();
+
     protected override async Task OnInitializedAsync()
     {
         await LoadPending();
@@ -77,6 +103,29 @@ else
     private async Task LoadPending()
     {
         pending = await Http.GetFromJsonAsync<List<LeaveRecordDto>>("api/leave/pending");
+        balances.Clear();
+    }
+
+    private string GetBalanceKey(int employeeId, Guid leaveTypeId)
+        => $"{employeeId}:{leaveTypeId}";
+
+    private async Task LoadBalance(LeaveRecordDto record)
+    {
+        try
+        {
+            var url = $"api/leave/balance-summary/{record.EmployeeId}/{record.LeaveTypeId}";
+            var summary = await Http.GetFromJsonAsync<LeaveBalanceSummaryDto>(url);
+
+            if (summary is not null)
+            {
+                balances[GetBalanceKey(record.EmployeeId, record.LeaveTypeId)] = summary;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to load leave balance for this request.");
+        }
     }
 
     private async Task Approve(int id)
@@ -111,15 +160,20 @@ else
 
     private async Task ViewAttachment(int id)
     {
-        // This expects your API to return a URL or open a file stream.
-        // For now, we'll assume an endpoint like api/leave/attachment/{id} that returns a URL string.
-        var url = await Http.GetStringAsync($"api/leave/attachment-url/{id}");
-        if (string.IsNullOrWhiteSpace(url))
+        try
         {
-            await JS.InvokeVoidAsync("alert", "No attachment found for this request.");
-            return;
-        }
+            var url = await Http.GetStringAsync($"api/leave/attachment-url/{id}");
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                await JS.InvokeVoidAsync("alert", "No attachment found for this request.");
+                return;
+            }
 
-        await JS.InvokeVoidAsync("open", url, "_blank");
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to load attachment.");
+        }
     }
 }

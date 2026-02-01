@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WebApp.Server.Data;
 
@@ -11,9 +12,11 @@ using WebApp.Server.Data;
 namespace WebApp.Server.Migrations
 {
     [DbContext(typeof(DataContext))]
-    partial class DataContextModelSnapshot : ModelSnapshot
+    [Migration("20260201111820_changeleavebalance")]
+    partial class changeleavebalance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -143,15 +146,15 @@ namespace WebApp.Server.Migrations
                         {
                             Id = "seed-admin-user-id",
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "ae6fd075-fa25-47bb-b60c-e97795dc95b2",
+                            ConcurrencyStamp = "f3b2652d-840b-43fa-acc8-b82a09046b4f",
                             Email = "Projects@aics.co.za",
                             EmailConfirmed = true,
                             LockoutEnabled = false,
                             NormalizedEmail = "PROJECTS@AICS.CO.ZA",
                             NormalizedUserName = "PROJECTS@AICS.CO.ZA",
-                            PasswordHash = "AQAAAAIAAYagAAAAEF+WkjMiKSUe0Niap5wgthF9bzwbzLhIBxweH4OrCncTPbVGw1uBRxll7Sk2eWd6qQ==",
+                            PasswordHash = "AQAAAAIAAYagAAAAEE145z1QzgbF6UfWuRzhUX3JUvBweK6abNH6Ns6C46OtVsQ4B3g1Gp1HLsayIFsBnw==",
                             PhoneNumberConfirmed = false,
-                            SecurityStamp = "933cfcbe-bfab-4767-869f-2545a3e30ed4",
+                            SecurityStamp = "22e5b83f-eb71-4a1f-a6b6-193715d013dc",
                             TwoFactorEnabled = false,
                             UserName = "Projects@aics.co.za"
                         });
@@ -565,10 +568,6 @@ namespace WebApp.Server.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<decimal>("CurrentBalance")
-                        .HasPrecision(9, 2)
-                        .HasColumnType("decimal(9,2)");
-
                     b.Property<DateTime?>("CurrentCycleEndDate")
                         .HasColumnType("datetime2");
 
@@ -588,8 +587,8 @@ namespace WebApp.Server.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal>("OpeningBalance")
-                        .HasPrecision(9, 2)
-                        .HasColumnType("decimal(9,2)");
+                        .HasPrecision(7, 2)
+                        .HasColumnType("decimal(7,2)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -684,9 +683,6 @@ namespace WebApp.Server.Migrations
                         .HasColumnType("int");
 
                     b.Property<bool>("AllowsCarryover")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("AllowsHalfDays")
                         .HasColumnType("bit");
 
                     b.Property<string>("ColorCode")

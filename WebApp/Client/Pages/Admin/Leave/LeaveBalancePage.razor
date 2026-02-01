@@ -1,0 +1,164 @@
+﻿@page "/admin/leave/balances"
+@using WebApp.Shared.Model
+@inject HttpClient Http
+
+<PageTitle>Leave Balances</PageTitle>
+
+<h2>Leave Balances</h2>
+<p class="text-muted">
+    Set starting and current balances per employee and leave type.
+</p>
+
+<div class="row mb-3">
+    <div class="col-md-4 col-6 mb-2">
+        <label class="form-label">Employee</label>
+        <input type="text"
+               class="form-control"
+               @bind="employeeFilter"
+               @bind:event="oninput"
+               placeholder="Search by name..." />
+    </div>
+    <div class="col-md-4 col-6 mb-2">
+        <label class="form-label">Leave Type</label>
+        <input type="text"
+               class="form-control"
+               @bind="leaveTypeFilter"
+               @bind:event="oninput"
+               placeholder="Search by leave type..." />
+    </div>
+</div>
+
+<div class="d-flex align-items-center mb-3">
+    <button class="btn btn-sm btn-outline-primary me-2" @onclick="InitializeBalances">
+        Initialize balances for all employees
+    </button>
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <span class="me-3 @(isError ? "text-danger" : "text-success")">@statusMessage</span>
+    }
+    <span class="text-muted">
+        Employees shown: <strong>@distinctEmployeeCount</strong>
+    </span>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else if (rows is null || !rows.Any())
+{
+    <p class="text-muted">No leave balances found. Make sure initialization has run.</p>
+}
+else
+{
+    <table class="table table-sm table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Leave Type</th>
+                <th>Start Date</th>
+                <th>Opening</th>
+                <th>Current</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in filteredRows)
+            {
+                <tr>
+                    <td>@r.EmployeeName</td>
+                    <td>@r.LeaveTypeName</td>
+                    <td>
+                        <InputDate @bind-Value="r.BalanceStartDate"
+                                   class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <InputNumber @bind-Value="r.OpeningBalance"
+                                     class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <InputNumber @bind-Value="r.CurrentBalance"
+                                     class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-primary"
+                                @onclick="() => SaveRow(r)">
+                            Save
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<LeaveBalanceEditDto> rows = new();
+    private bool isLoading = true;
+    private string statusMessage = string.Empty;
+    private bool isError = false;
+
+    private string employeeFilter = string.Empty;
+    private string leaveTypeFilter = string.Empty;
+
+    private IEnumerable<LeaveBalanceEditDto> filteredRows =>
+        rows
+            .Where(r =>
+                (string.IsNullOrWhiteSpace(employeeFilter)
+                    || r.EmployeeName.Contains(employeeFilter, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(leaveTypeFilter)
+                    || r.LeaveTypeName.Contains(leaveTypeFilter, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(r => r.EmployeeName)
+            .ThenBy(r => r.LeaveTypeName);
+
+    private int distinctEmployeeCount =>
+        filteredRows
+            .Select(r => r.EmployeeId)
+            .Distinct()
+            .Count();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBalances();
+    }
+
+    private async Task LoadBalances(int? employeeId = null)
+    {
+        isLoading = true;
+        statusMessage = string.Empty;
+        isError = false;
+
+        var url = "api/leavebalances";
+        if (employeeId.HasValue)
+        {
+            url += $"?employeeId={employeeId.Value}";
+        }
+
+        rows = await Http.GetFromJsonAsync<List<LeaveBalanceEditDto>>(url) ?? new();
+        isLoading = false;
+    }
+
+    private async Task InitializeBalances()
+    {
+        isError = false;
+        statusMessage = string.Empty;
+
+        var response = await Http.PostAsync("api/leavebalances/init", null);
+        if (!response.IsSuccessStatusCode)
+        {
+            isError = true;
+            statusMessage = "Failed to initialize balances.";
+            return;
+        }
+
+        var createdCount = await response.Content.ReadFromJsonAsync<int>();
+        statusMessage = $"Initialized {createdCount} missing balances.";
+        await LoadBalances();
+    }
+
+    private async Task SaveRow(LeaveBalanceEditDto row)
+    {
+        var response = await Http.PutAsJsonAsync($"api/leavebalances/{row.Id}", row);
+        response.EnsureSuccessStatusCode();
+    }
+}

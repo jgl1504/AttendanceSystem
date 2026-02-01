@@ -42,7 +42,10 @@ namespace WebApp.Shared.Model
 
         public LeavePortion Portion { get; set; } = LeavePortion.FullDay;
 
-        public LeaveType LeaveType { get; set; }
+        // CHANGED: Use LeaveType table instead of enum
+        public Guid LeaveTypeId { get; set; }
+        public LeaveType LeaveType { get; set; } = null!;
+
         public LeaveStatus Status { get; set; }
 
         public string Reason { get; set; }
@@ -52,18 +55,9 @@ namespace WebApp.Shared.Model
 
         public DateTime CreatedAt { get; set; }
 
-        // NEW: stored file name for doctor's letter / proof
+        // Attachment support
         public string? AttachmentFileName { get; set; }
-    }
-
-
-    public enum LeaveType
-    {
-        Annual = 1,
-        Sick = 2,
-        FamilyResponsibility = 3,
-        Maternity = 4,
-        Other = 5
+        public string? AttachmentPath { get; set; }
     }
 
     public enum LeaveStatus

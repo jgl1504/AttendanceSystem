@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WebApp.Server.Data;
 
@@ -11,9 +12,11 @@ using WebApp.Server.Data;
 namespace WebApp.Server.Migrations
 {
     [DbContext(typeof(DataContext))]
-    partial class DataContextModelSnapshot : ModelSnapshot
+    [Migration("20260201055148_changeleaverev2")]
+    partial class changeleaverev2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -143,15 +146,15 @@ namespace WebApp.Server.Migrations
                         {
                             Id = "seed-admin-user-id",
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "ae6fd075-fa25-47bb-b60c-e97795dc95b2",
+                            ConcurrencyStamp = "9854d8da-0fcf-489a-9a81-5674817b5a3c",
                             Email = "Projects@aics.co.za",
                             EmailConfirmed = true,
                             LockoutEnabled = false,
                             NormalizedEmail = "PROJECTS@AICS.CO.ZA",
                             NormalizedUserName = "PROJECTS@AICS.CO.ZA",
-                            PasswordHash = "AQAAAAIAAYagAAAAEF+WkjMiKSUe0Niap5wgthF9bzwbzLhIBxweH4OrCncTPbVGw1uBRxll7Sk2eWd6qQ==",
+                            PasswordHash = "AQAAAAIAAYagAAAAELVNH5qyJvyZqeQKyXPNSKhUNVzHXXExfayYtTcvYLZN8AkQnSynk01WUwQnF/3o1w==",
                             PhoneNumberConfirmed = false,
-                            SecurityStamp = "933cfcbe-bfab-4767-869f-2545a3e30ed4",
+                            SecurityStamp = "1d9080f0-c256-4f06-bba7-86ab40beeddc",
                             TwoFactorEnabled = false,
                             UserName = "Projects@aics.co.za"
                         });
@@ -565,10 +568,6 @@ namespace WebApp.Server.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<decimal>("CurrentBalance")
-                        .HasPrecision(9, 2)
-                        .HasColumnType("decimal(9,2)");
-
                     b.Property<DateTime?>("CurrentCycleEndDate")
                         .HasColumnType("datetime2");
 
@@ -588,8 +587,7 @@ namespace WebApp.Server.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal>("OpeningBalance")
-                        .HasPrecision(9, 2)
-                        .HasColumnType("decimal(9,2)");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -686,9 +684,6 @@ namespace WebApp.Server.Migrations
                     b.Property<bool>("AllowsCarryover")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("AllowsHalfDays")
-                        .HasColumnType("bit");
-
                     b.Property<string>("ColorCode")
                         .HasColumnType("nvarchar(max)");
 
@@ -699,12 +694,10 @@ namespace WebApp.Server.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal?>("DaysPerCycle")
-                        .HasPrecision(7, 2)
-                        .HasColumnType("decimal(7,2)");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("DaysPerYear")
-                        .HasPrecision(7, 2)
-                        .HasColumnType("decimal(7,2)");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
@@ -738,8 +731,7 @@ namespace WebApp.Server.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("PaymentPercentage")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("decimal(5,2)");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("PoolType")
                         .HasColumnType("int");
@@ -890,13 +882,11 @@ namespace WebApp.Server.Migrations
 
                     b.HasOne("WebApp.Shared.Model.Employee", "OvertimeApprovedByEmployee")
                         .WithMany()
-                        .HasForeignKey("OvertimeApprovedByEmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .HasForeignKey("OvertimeApprovedByEmployeeId");
 
                     b.HasOne("WebApp.Shared.Model.Site", "Site")
                         .WithMany()
-                        .HasForeignKey("SiteId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .HasForeignKey("SiteId");
 
                     b.Navigation("ClockedByEmployee");
 
@@ -959,7 +949,7 @@ namespace WebApp.Server.Migrations
                     b.HasOne("WebApp.Shared.Model.LeaveType", "LeaveType")
                         .WithMany()
                         .HasForeignKey("LeaveTypeId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Employee");

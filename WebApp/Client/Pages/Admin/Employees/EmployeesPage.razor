@@ -37,6 +37,14 @@ else if (!employees.Any())
 }
 else
 {
+    <div class="d-flex justify-content-end mb-2">
+        <span class="text-muted">
+            Employees shown: <strong>@filteredEmployees.Count()</strong>
+            &nbsp;|&nbsp;
+            Total employees: <strong>@employees.Count</strong>
+        </span>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-striped table-hover align-middle">
             <thead class="table-light">
@@ -211,7 +219,6 @@ else
             Role = e.Role
         };
 
-        // Use existing JS helper: window.scrollToElement(selector)
         await JS.InvokeVoidAsync("scrollToElement", "#employee-edit-form");
     }
 

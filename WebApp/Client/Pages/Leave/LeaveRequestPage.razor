@@ -9,7 +9,7 @@
 
 <AuthorizeView>
     <Authorized>
-        @if (employees is null || departments is null)
+        @if (employees is null || departments is null || leaveTypes is null)
         {
             <p>Loading data...</p>
         }
@@ -18,8 +18,7 @@
             <div class="row mb-3">
                 <div class="col-md-3 col-12 mb-2">
                     <label class="form-label">Department</label>
-                    <select class="form-select"
-                            @bind="SelectedDepartmentId">
+                    <select class="form-select" @bind="SelectedDepartmentId">
                         <option value="">-- All departments --</option>
                         @foreach (var d in departments)
                         {
@@ -30,8 +29,7 @@
 
                 <div class="col-md-3 col-12 mb-2">
                     <label class="form-label">Employee</label>
-                    <select class="form-select"
-                            @bind="SelectedEmployeeId">
+                    <select class="form-select" @bind="SelectedEmployeeId">
                         <option value="">-- Select employee --</option>
                         @foreach (var e in filteredEmployees)
                         {
@@ -50,28 +48,43 @@
                     <InputDate @bind-Value="EndDate" class="form-control" />
                 </div>
 
-                <div class="col-md-2 col-6 mb-2">
-                    <label class="form-label">Type</label>
-                    <select class="form-select" @bind="selectedLeaveType">
-                        <option value="Annual">Annual</option>
-                        <option value="Sick">Sick</option>
-                        <option value="FamilyResponsibility">Family Responsibility</option>
-                        <option value="Maternity">Maternity</option>
-                        <option value="Other">Other</option>
+                <div class="col-md-4 col-6 mb-2">
+                    <label class="form-label">Leave Type</label>
+                    <select class="form-select" @bind="selectedLeaveTypeId" @oninput="OnLeaveTypeChanged">
+                        <option value="">-- Select leave type --</option>
+                        @foreach (var lt in leaveTypes)
+                        {
+                            <option value="@lt.Id">@lt.Name</option>
+                        }
                     </select>
                 </div>
 
-                <div class="col-md-2 col-6 mb-2">
-                    <label class="form-label">Portion</label>
-                    <InputSelect @bind-Value="SelectedPortion" class="form-select">
-                        <option value="">-- Select --</option>
-                        <option value="@LeavePortion.FullDay">Full day</option>
-                        <option value="@LeavePortion.HalfDay">Half day</option>
-                    </InputSelect>
-                </div>
+                @if (AllowHalfDay)
+                {
+                    <div class="col-md-2 col-6 mb-2">
+                        <label class="form-label">Portion</label>
+                        <InputSelect @bind-Value="SelectedPortion" class="form-select">
+                            <option value="@LeavePortion.FullDay">Full day</option>
+                            <option value="@LeavePortion.HalfDay">Half day</option>
+                        </InputSelect>
+                    </div>
+                }
             </div>
 
-            @* Attachment UI removed *@
+            @if (selectedLeaveType != null && selectedLeaveType.RequiresSupportingDocument)
+            {
+                <div class="alert alert-info mb-3">
+                    <strong>@selectedLeaveType.Name</strong> requires a supporting document
+                    (e.g., medical certificate, proof). Please upload after submitting or contact admin.
+                </div>
+            }
+
+            @if (selectedLeaveType != null && selectedLeaveType.MinNoticeDays > 0)
+            {
+                <div class="alert alert-warning mb-3">
+                    This leave type requires <strong>@selectedLeaveType.MinNoticeDays days</strong> notice.
+                </div>
+            }
 
             <div class="mb-3">
                 <label class="form-label">Reason (optional)</label>
@@ -93,22 +106,23 @@
 
             <p class="mt-3 @(isError ? "text-danger" : "text-muted")">@statusMessage</p>
 
-            @if (balance is not null)
+            @if (balanceSummary is not null && selectedLeaveType is not null)
             {
+                var effectiveDays = calculatedDays > 0 ? GetEffectiveDays(calculatedDays, SelectedPortion) : 0;
                 <div class="mt-3 alert alert-info">
                     <div>
-                        Current annual leave balance:
-                        <strong>@balance.DaysBalance</strong> days
-                        (accruing @balance.AccrualRatePerMonth days/month)
+                        <strong>@balanceSummary.LeaveTypeName</strong> pool:
+                        <strong>@balanceSummary.TotalEntitlement</strong> total,
+                        <strong>@balanceSummary.Taken</strong> used,
+                        <strong>@balanceSummary.Remaining</strong> remaining.
                     </div>
 
-                    @if (calculatedDays > 0)
+                    @if (effectiveDays > 0)
                     {
-                        var effectiveDays = GetEffectiveDays(calculatedDays, SelectedPortion);
                         <div class="mt-1">
                             This request uses <strong>@effectiveDays</strong> day(s),
                             remaining after approval would be
-                            <strong>@(balance.DaysBalance - effectiveDays)</strong> day(s).
+                            <strong>@(balanceSummary.Remaining - effectiveDays)</strong> day(s).
                         </div>
                     }
                 </div>
@@ -141,7 +155,7 @@
                                 <td>@r.EndDate.ToString("yyyy-MM-dd")</td>
                                 <td>@r.DaysTaken</td>
                                 <td>@r.Portion</td>
-                                <td>@r.LeaveType</td>
+                                <td>@r.LeaveTypeName</td>
                                 <td>@r.Status</td>
                             </tr>
                         }
@@ -162,17 +176,20 @@
     private List<EmployeeListItem>? employees;
     private List<EmployeeListItem> filteredEmployees = new();
     private List<DepartmentListItem>? departments;
+    private List<LeaveType>? leaveTypes;
+    private LeaveType? selectedLeaveType;
 
     private int? _selectedEmployeeId;
     private int? selectedDepartmentId;
 
     private DateTime startDate = DateTime.Today;
     private DateTime endDate = DateTime.Today;
-    private string selectedLeaveType = "Annual";
+    private string selectedLeaveTypeId = "";
     private LeavePortion selectedPortion = LeavePortion.FullDay;
     private string reason = string.Empty;
 
-    private EmployeeLeaveDto? balance;
+    // NEW: per-type pool summary instead of legacy EmployeeLeaveDto
+    private LeaveBalanceSummaryDto? balanceSummary;
     private List<LeaveRecordDto>? records;
 
     private decimal calculatedDays = 0;
@@ -181,24 +198,52 @@
     private bool isError;
     private string statusMessage = string.Empty;
 
+    private bool AllowHalfDay => selectedLeaveType?.AllowsHalfDays ?? true;
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             departments = await Http.GetFromJsonAsync<List<DepartmentListItem>>("api/departments") ?? new();
             employees = await Http.GetFromJsonAsync<List<EmployeeListItem>>("api/employees") ?? new();
+            leaveTypes = await Http.GetFromJsonAsync<List<LeaveType>>("api/leavetypes/active") ?? new();
             filteredEmployees = employees.ToList();
         }
         catch
         {
             departments ??= new();
             employees ??= new();
+            leaveTypes ??= new();
             filteredEmployees = employees.ToList();
             isError = true;
             statusMessage = "Failed to load data for leave request.";
         }
 
         RecalculateDays();
+    }
+
+    private void OnLeaveTypeChanged(ChangeEventArgs e)
+    {
+        var leaveTypeIdStr = e.Value?.ToString();
+        if (Guid.TryParse(leaveTypeIdStr, out var leaveTypeId))
+        {
+            selectedLeaveType = leaveTypes?.FirstOrDefault(lt => lt.Id == leaveTypeId);
+            selectedLeaveTypeId = leaveTypeIdStr!;
+
+            if (selectedLeaveType is not null && !selectedLeaveType.AllowsHalfDays)
+            {
+                SelectedPortion = LeavePortion.FullDay;
+            }
+
+            // refresh per-type balance when type changes
+            _ = LoadBalanceSummary();
+        }
+        else
+        {
+            selectedLeaveType = null;
+            selectedLeaveTypeId = "";
+            balanceSummary = null;
+        }
     }
 
     private int? SelectedDepartmentId
@@ -209,7 +254,7 @@
             selectedDepartmentId = value;
             FilterEmployees();
             _selectedEmployeeId = null;
-            balance = null;
+            balanceSummary = null;
             records = null;
             RecalculateDays();
         }
@@ -242,6 +287,7 @@
         {
             _selectedEmployeeId = value;
             _ = LoadEmployeeData();
+            _ = LoadBalanceSummary();
             RecalculateDays();
         }
     }
@@ -260,14 +306,34 @@
     {
         if (!_selectedEmployeeId.HasValue)
         {
-            balance = null;
+            balanceSummary = null;
             records = null;
             return;
         }
 
-        balance = await Http.GetFromJsonAsync<EmployeeLeaveDto>($"api/leave/balance/{_selectedEmployeeId.Value}");
+        // history still uses LeaveRecords
         records = await Http.GetFromJsonAsync<List<LeaveRecordDto>>($"api/leave/employee/{_selectedEmployeeId.Value}");
         StateHasChanged();
+    }
+
+    private async Task LoadBalanceSummary()
+    {
+        if (!_selectedEmployeeId.HasValue || string.IsNullOrEmpty(selectedLeaveTypeId))
+        {
+            balanceSummary = null;
+            return;
+        }
+
+        try
+        {
+            var url = $"api/leave/balance-summary/{_selectedEmployeeId.Value}/{selectedLeaveTypeId}";
+            balanceSummary = await Http.GetFromJsonAsync<LeaveBalanceSummaryDto>(url);
+            StateHasChanged();
+        }
+        catch
+        {
+            balanceSummary = null;
+        }
     }
 
     private void RecalculateDays()
@@ -334,6 +400,13 @@
             return;
         }
 
+        if (string.IsNullOrEmpty(selectedLeaveTypeId))
+        {
+            isError = true;
+            statusMessage = "Select a leave type.";
+            return;
+        }
+
         if (endDate < startDate)
         {
             isError = true;
@@ -352,14 +425,14 @@
         var dto = new RequestLeaveDto
         {
             EmployeeId = _selectedEmployeeId.Value,
+            LeaveTypeId = Guid.Parse(selectedLeaveTypeId),
             StartDate = startDate,
             EndDate = endDate,
-            LeaveType = Enum.Parse<LeaveType>(selectedLeaveType),
             Reason = reason,
             Portion = SelectedPortion
         };
 
-        HttpResponseMessage response = await Http.PostAsJsonAsync("api/leave/request", dto);
+        var response = await Http.PostAsJsonAsync("api/leave/request", dto);
 
         isSubmitting = false;
 
@@ -373,6 +446,7 @@
         statusMessage = "Leave request submitted.";
 
         await LoadEmployeeData();
+        await LoadBalanceSummary();
         RecalculateDays();
     }
 

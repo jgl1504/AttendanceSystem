@@ -4,6 +4,11 @@ using WebApp.Shared.Model;
 
 namespace WebApp.Server.Services.Leave
 {
+    /// <summary>
+    /// Legacy annual leave balance + setup, based on EmployeeLeaves.
+    /// New per-pool balances are handled by LeaveBalanceService.
+    /// Also provides per-type balance summaries for admin view.
+    /// </summary>
     public class LeaveService
     {
         private readonly DataContext _context;
@@ -13,7 +18,9 @@ namespace WebApp.Server.Services.Leave
             _context = context;
         }
 
-        // Get employee's current leave balance
+        // ===== LEGACY EMPLOYEE ANNUAL BALANCE (EmployeeLeaves) =====
+
+        // Get employee's current legacy leave balance (EmployeeLeaves)
         public async Task<EmployeeLeaveDto?> GetLeaveBalanceAsync(int employeeId)
         {
             var leave = await _context.EmployeeLeaves
@@ -37,7 +44,7 @@ namespace WebApp.Server.Services.Leave
             };
         }
 
-        // Auto-accrue monthly leave
+        // Auto-accrue monthly leave on the legacy balance
         public async Task AccrueLeaveIfDueAsync(EmployeeLeave leave)
         {
             var today = DateTime.UtcNow;
@@ -53,195 +60,7 @@ namespace WebApp.Server.Services.Leave
             }
         }
 
-        // Request leave WITHOUT attachment
-        public async Task<bool> RequestLeaveAsync(RequestLeaveDto request)
-        {
-            var employee = await _context.Employees.FindAsync(request.EmployeeId);
-            if (employee == null)
-                return false;
-
-            var leave = await _context.EmployeeLeaves
-                .FirstOrDefaultAsync(l => l.EmployeeId == request.EmployeeId);
-
-            // If no leave row yet, create one with default values so requests can still be stored
-            if (leave == null)
-            {
-                leave = new EmployeeLeave
-                {
-                    EmployeeId = request.EmployeeId,
-                    DaysBalance = 0,
-                    // Use same defaults as InitializeEmployeeLeaveAsync
-                    DaysPerWeek = 5,
-                    AccrualRatePerMonth = 1.25m,
-                    LastAccrualDate = DateTime.UtcNow,
-                    LastAccrualMonth = DateTime.UtcNow.Month,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _context.EmployeeLeaves.Add(leave);
-                await _context.SaveChangesAsync();
-            }
-
-            var workingDays = CalculateWorkingDays(request.StartDate, request.EndDate);
-
-            decimal daysTaken;
-            if (request.Portion == LeavePortion.HalfDay)
-            {
-                daysTaken = workingDays <= 0 ? 0.5m : workingDays * 0.5m;
-            }
-            else
-            {
-                daysTaken = workingDays <= 0 ? 1.0m : workingDays;
-            }
-
-            var leaveRecord = new LeaveRecord
-            {
-                EmployeeId = request.EmployeeId,
-                StartDate = request.StartDate,
-                EndDate = request.EndDate,
-                DaysTaken = daysTaken,
-                LeaveType = request.LeaveType,
-                Status = LeaveStatus.Pending,
-                Reason = request.Reason,
-                RequestedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                Portion = request.Portion,
-                AttachmentFileName = null
-            };
-
-            _context.LeaveRecords.Add(leaveRecord);
-            await _context.SaveChangesAsync();
-
-            return true;
-        }
-
-        public async Task<string?> GetAttachmentFileNameAsync(int leaveRecordId)
-        {
-            var record = await _context.LeaveRecords
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Id == leaveRecordId);
-
-            return record?.AttachmentFileName;
-        }
-
-        // Approve leave and deduct from balance
-        public async Task<bool> ApproveLeaveAsync(int leaveRecordId)
-        {
-            var record = await _context.LeaveRecords
-                .Include(r => r.Employee)
-                .FirstOrDefaultAsync(r => r.Id == leaveRecordId);
-
-            if (record == null || record.Status != LeaveStatus.Pending)
-                return false;
-
-            if (record.LeaveType == LeaveType.Annual)
-            {
-                var leave = await _context.EmployeeLeaves
-                    .FirstOrDefaultAsync(l => l.EmployeeId == record.EmployeeId);
-
-                if (leave == null)
-                    return false;
-
-                // This can take the balance to 0 or below
-                leave.DaysBalance -= record.DaysTaken;
-                _context.EmployeeLeaves.Update(leave);
-            }
-
-            record.Status = LeaveStatus.Approved;
-            record.ApprovedAt = DateTime.UtcNow;
-
-            _context.LeaveRecords.Update(record);
-            await _context.SaveChangesAsync();
-            return true;
-        }
-
-        // Get all leave records for one employee
-        public async Task<List<LeaveRecordDto>> GetLeaveRecordsForEmployeeAsync(int employeeId)
-        {
-            return await _context.LeaveRecords
-                .Include(r => r.Employee)
-                .Where(r => r.EmployeeId == employeeId)
-                .OrderByDescending(r => r.StartDate)
-                .Select(r => new LeaveRecordDto
-                {
-                    Id = r.Id,
-                    EmployeeId = r.EmployeeId,
-                    EmployeeName = r.Employee != null ? r.Employee.Name : string.Empty,
-                    StartDate = r.StartDate,
-                    EndDate = r.EndDate,
-                    DaysTaken = r.DaysTaken,
-                    LeaveType = r.LeaveType,
-                    Status = r.Status,
-                    Reason = r.Reason,
-                    RequestedAt = r.RequestedAt,
-                    ApprovedAt = r.ApprovedAt,
-                    Portion = r.Portion,
-                    AttachmentFileName = r.AttachmentFileName
-                })
-                .ToListAsync();
-        }
-
-        // Get all pending leave requests
-        public async Task<List<LeaveRecordDto>> GetPendingLeaveRequestsAsync()
-        {
-            return await _context.LeaveRecords
-                .Include(r => r.Employee)
-                .Where(r => r.Status == LeaveStatus.Pending)
-                .OrderBy(r => r.StartDate)
-                .Select(r => new LeaveRecordDto
-                {
-                    Id = r.Id,
-                    EmployeeId = r.EmployeeId,
-                    EmployeeName = r.Employee != null ? r.Employee.Name : string.Empty,
-                    StartDate = r.StartDate,
-                    EndDate = r.EndDate,
-                    DaysTaken = r.DaysTaken,
-                    LeaveType = r.LeaveType,
-                    Status = r.Status,
-                    Reason = r.Reason,
-                    RequestedAt = r.RequestedAt,
-                    ApprovedAt = r.ApprovedAt,
-                    Portion = r.Portion,
-                    AttachmentFileName = r.AttachmentFileName
-                })
-                .ToListAsync();
-        }
-
-        // Reject leave
-        public async Task<bool> RejectLeaveAsync(int leaveRecordId)
-        {
-            var record = await _context.LeaveRecords.FindAsync(leaveRecordId);
-            if (record == null || record.Status != LeaveStatus.Pending)
-                return false;
-
-            record.Status = LeaveStatus.Rejected;
-            record.ApprovedAt = DateTime.UtcNow;
-
-            _context.LeaveRecords.Update(record);
-            await _context.SaveChangesAsync();
-            return true;
-        }
-
-        // Calculate working days (excludes weekends)
-        private decimal CalculateWorkingDays(DateTime start, DateTime end)
-        {
-            decimal days = 0;
-            var current = start.Date;
-
-            while (current <= end.Date)
-            {
-                if (current.DayOfWeek != DayOfWeek.Saturday &&
-                    current.DayOfWeek != DayOfWeek.Sunday)
-                {
-                    days += 1;
-                }
-                current = current.AddDays(1);
-            }
-
-            return days;
-        }
-
-        // Initialize leave for new employee
+        // Initialize legacy leave for new employee
         public async Task InitializeEmployeeLeaveAsync(int employeeId, int daysPerWeek = 5)
         {
             var accrualRate = daysPerWeek == 5 ? 1.25m : 1.5m;
@@ -262,6 +81,7 @@ namespace WebApp.Server.Services.Leave
             await _context.SaveChangesAsync();
         }
 
+        // Legacy setup screen (admin /admin/leave/setup)
         public async Task<List<LeaveSetupRowDto>> GetLeaveSetupAsync()
         {
             var employees = await _context.Employees
@@ -320,6 +140,66 @@ namespace WebApp.Server.Services.Leave
 
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        // ===== PER-TYPE BALANCE SUMMARY FOR ADMIN (by LeaveType) =====
+
+        // Returns entitlement, taken, remaining for a specific employee + leave type
+        public async Task<LeaveBalanceSummaryDto?> GetLeaveBalanceSummaryAsync(int employeeId, Guid leaveTypeId)
+        {
+            var leaveType = await _context.LeaveTypes
+                .FirstOrDefaultAsync(lt => lt.Id == leaveTypeId && !lt.IsDeleted);
+
+            if (leaveType == null)
+                return null;
+
+            decimal totalEntitlement;
+
+            // If you have per-type balances in LeaveBalances, use that
+            var balanceRow = await _context.LeaveBalances
+                .FirstOrDefaultAsync(b => b.EmployeeId == employeeId && b.LeaveTypeId == leaveTypeId);
+
+            if (balanceRow != null)
+            {
+                // OpeningBalance + CurrentBalance, adjust if your schema is different
+                totalEntitlement = balanceRow.OpeningBalance + balanceRow.CurrentBalance;
+            }
+            else
+            {
+                // Fallback: use LeaveType configuration (simplified)
+                // Annual / Fixed: DaysPerYear, Cycle: DaysPerCycle, Unlimited/None: treat as "unlimited"
+                if (leaveType.AccrualType == LeaveAccrualType.Annual ||
+                    leaveType.AccrualType == LeaveAccrualType.Fixed)
+                {
+                    totalEntitlement = leaveType.DaysPerYear;
+                }
+                else if (leaveType.AccrualType == LeaveAccrualType.Cycle &&
+                         leaveType.DaysPerCycle.HasValue)
+                {
+                    totalEntitlement = leaveType.DaysPerCycle.Value;
+                }
+                else
+                {
+                    // Unlimited or None: use a large sentinel value
+                    totalEntitlement = 9999m;
+                }
+            }
+
+            var taken = await _context.LeaveRecords
+                .Where(r => r.EmployeeId == employeeId
+                            && r.LeaveTypeId == leaveTypeId
+                            && r.Status == LeaveStatus.Approved)
+                .SumAsync(r => r.DaysTaken);
+
+            var remaining = totalEntitlement - taken;
+
+            return new LeaveBalanceSummaryDto
+            {
+                LeaveTypeName = leaveType.Name,
+                TotalEntitlement = totalEntitlement,
+                Taken = taken,
+                Remaining = remaining
+            };
         }
     }
 }

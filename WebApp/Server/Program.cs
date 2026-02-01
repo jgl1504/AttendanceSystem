@@ -67,6 +67,11 @@ builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<LeaveService>();
 builder.Services.AddScoped<SiteService>();
+builder.Services.AddScoped<LeaveTypeService>();
+builder.Services.AddScoped<LeaveBalanceService>();
+builder.Services.AddScoped<LeaveService>();
+builder.Services.AddScoped<LeaveRequestService>();
+
 
 
 builder.Services.AddHttpContextAccessor();

@@ -27,15 +27,21 @@ namespace WebApp.Shared.Model
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
         public decimal DaysTaken { get; set; }
-        public LeaveType LeaveType { get; set; }
+
+        // UPDATED: Use LeaveType table instead of enum
+        public Guid LeaveTypeId { get; set; }
+        public string LeaveTypeName { get; set; } = string.Empty;
+        public bool RequiresDocument { get; set; }  // From LeaveType.RequiresSupportingDocument
+
         public LeaveStatus Status { get; set; }
         public string Reason { get; set; }
         public DateTime RequestedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public LeavePortion Portion { get; set; }
 
-        // New: attachment file name or relative URL
+        // Attachment file name or relative URL
         public string? AttachmentFileName { get; set; }
+        public string? AttachmentPath { get; set; }
     }
 
     public class RequestLeaveDto
@@ -43,7 +49,10 @@ namespace WebApp.Shared.Model
         public int EmployeeId { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
-        public LeaveType LeaveType { get; set; }
+
+        // UPDATED: Use LeaveTypeId instead of enum
+        public Guid LeaveTypeId { get; set; }
+
         public string Reason { get; set; }
         public LeavePortion Portion { get; set; } = LeavePortion.FullDay;
 
