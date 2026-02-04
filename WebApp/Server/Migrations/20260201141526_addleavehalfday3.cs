@@ -35,13 +35,7 @@ namespace WebApp.Server.Migrations
                 oldPrecision: 18,
                 oldScale: 2);
 
-            // New flag on LeaveTypes
-            migrationBuilder.AddColumn<bool>(
-                name: "AllowsHalfDays",
-                table: "LeaveTypes",
-                type: "bit",
-                nullable: false,
-                defaultValue: true);
+           
 
             migrationBuilder.UpdateData(
                 table: "AspNetUsers",
@@ -59,10 +53,7 @@ namespace WebApp.Server.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Remove flag
-            migrationBuilder.DropColumn(
-                name: "AllowsHalfDays",
-                table: "LeaveTypes");
+          
 
             // Revert precision on LeaveBalances
             migrationBuilder.AlterColumn<decimal>(

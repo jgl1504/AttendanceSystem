@@ -5,31 +5,28 @@
 namespace WebApp.Server.Migrations
 {
     /// <inheritdoc />
-    public partial class addleavehalfday : Migration
+    public partial class reports : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-
             migrationBuilder.UpdateData(
                 table: "AspNetUsers",
                 keyColumn: "Id",
                 keyValue: "seed-admin-user-id",
                 columns: new[] { "ConcurrencyStamp", "PasswordHash", "SecurityStamp" },
-                values: new object[] { "5406cc53-58c4-4862-ad0a-5d2adc1d5398", "AQAAAAIAAYagAAAAEBQK+lJSqSvhJouBOmYgJW4yS9/Tncr7a0Y/LNoGuZ+1OwVeMjKaKoQL2ur6ClW7Qg==", "82e43710-2782-4fec-999a-31f4a0336308" });
+                values: new object[] { "ed513dc3-a05a-41d3-8493-e6c18af55d38", "AQAAAAIAAYagAAAAELF5Fr5djG+94ssBKz/fj2DSqOY7Z8rkc7m/4Yb0ngcC56lzuJ3hjCcHfMT/teLhDQ==", "e82816d5-6114-41c7-9b6b-70b3fe2d35ea" });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-          
-
             migrationBuilder.UpdateData(
                 table: "AspNetUsers",
                 keyColumn: "Id",
                 keyValue: "seed-admin-user-id",
                 columns: new[] { "ConcurrencyStamp", "PasswordHash", "SecurityStamp" },
-                values: new object[] { "26359aaf-92f6-4f14-9355-9327249429c9", "AQAAAAIAAYagAAAAEIfKVCxm/V9ZGpWEVgeyRC2OmoRZJGt9349m6oGh7ds3RkJ8PgOjGVtPuTtQnaUiGQ==", "b369c4f9-e306-48ab-a8ec-260f3ab6df22" });
+                values: new object[] { "ae6fd075-fa25-47bb-b60c-e97795dc95b2", "AQAAAAIAAYagAAAAEF+WkjMiKSUe0Niap5wgthF9bzwbzLhIBxweH4OrCncTPbVGw1uBRxll7Sk2eWd6qQ==", "933cfcbe-bfab-4767-869f-2545a3e30ed4" });
         }
     }
 }
