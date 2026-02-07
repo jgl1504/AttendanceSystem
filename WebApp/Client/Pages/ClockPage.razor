@@ -127,7 +127,7 @@
                                             <td>@(s.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
                                             <td>@(s.SiteName ?? "-")</td>
                                             <td>@s.WorkCategory</td>
-                                            <td>@(s.HoursWorked?.ToString("0.00") ?? "-")</td>
+                                            <td>@FormatHours(s.HoursWorked)</td>
                                         </tr>
                                     }
                                 </tbody>
@@ -257,7 +257,7 @@
                                                     <td>@(s.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
                                                     <td>@(s.SiteName ?? "-")</td>
                                                     <td>@s.WorkCategory</td>
-                                                    <td>@(s.HoursWorked?.ToString("0.00") ?? "-")</td>
+                                                    <td>@FormatHours(s.HoursWorked)</td>
                                                 </tr>
                                             }
                                         </tbody>
@@ -301,13 +301,10 @@
     private bool isClockingIn;
     private bool isClockingOut;
 
-    // New fields to support the warning
+    // warning for old open record
     private bool showsOldOpenWarning;
     private string? lastClockInLocalString;
 
-    // UI rules:
-    // - CanClockIn only if not clocked in
-    // - CanClockOut whenever clocked in, regardless of date
     private bool CanClockIn => selectedEmployeeId.HasValue && !isSelectedEmployeeClockedIn;
     private bool CanClockOut => selectedEmployeeId.HasValue && isSelectedEmployeeClockedIn;
 
@@ -315,7 +312,7 @@
     private List<AttendanceListItemDto> todaysSegments = new();
     private DateTime today = DateTime.Today;
 
-    // NEW: Site selection
+    // Site selection
     private List<Site> activeSites = new();
     private Guid? selectedSiteId;
 
@@ -332,24 +329,15 @@
             }
             catch
             {
-                isMobile = false; // fallback to desktop
+                isMobile = false;
             }
 
-            departments = await Http.GetFromJsonAsync<List<DepartmentItem>>("api/departments")
-                          ?? new();
-            departments = departments
-                .OrderBy(d => d.Name)
-                .ToList();
+            departments = await Http.GetFromJsonAsync<List<DepartmentItem>>("api/departments") ?? new();
+            departments = departments.OrderBy(d => d.Name).ToList();
 
-            allEmployees = await Http.GetFromJsonAsync<List<EmployeeItem>>("api/employees")
-                           ?? new();
+            allEmployees = await Http.GetFromJsonAsync<List<EmployeeItem>>("api/employees") ?? new();
+            allEmployees = allEmployees.Where(e => e.IsActive).OrderBy(e => e.Name).ToList();
 
-            allEmployees = allEmployees
-                .Where(e => e.IsActive)
-                .OrderBy(e => e.Name)
-                .ToList();
-
-            // NEW: Load active sites
             activeSites = await Http.GetFromJsonAsync<List<Site>>("api/sites/active") ?? new();
 
             selectedDepartmentId = null;
@@ -359,7 +347,6 @@
             StateHasChanged();
         }
     }
-
 
     private void OnDepartmentChanged(ChangeEventArgs e)
     {
@@ -425,7 +412,6 @@
         await RefreshStatusAndSegments();
     }
 
-    // NEW: Site selection handler
     private void OnSiteChanged(ChangeEventArgs e)
     {
         if (Guid.TryParse(e.Value?.ToString(), out var id))
@@ -454,6 +440,14 @@
         if (!selectedEmployeeId.HasValue || isClockingIn || isSelectedEmployeeClockedIn)
             return;
 
+        // Require site selection
+        if (selectedSiteId == null)
+        {
+            isError = true;
+            statusMessage = "Please select a site before clocking in.";
+            return;
+        }
+
         isClockingIn = true;
 
         var loc = await GetLocationAsync();
@@ -464,7 +458,7 @@
             Latitude = loc?.Latitude,
             Longitude = loc?.Longitude,
             WorkCategory = selectedCategory,
-            SiteId = selectedSiteId  // NEW: Include selected site
+            SiteId = selectedSiteId
         };
 
         var response = await Http.PostAsJsonAsync("api/attendance/clockin", request);
@@ -542,7 +536,6 @@
 
             if (saTime.Date < DateTime.Today)
             {
-                // Open record from a previous day – show special warning
                 showsOldOpenWarning = true;
                 statusMessage = $"Currently clocked in since {lastClockInLocalString}. Please clock out first, then clock in for today.";
             }
@@ -605,5 +598,17 @@
         public double Latitude { get; set; }
         public double Longitude { get; set; }
     }
-}
 
+    // format decimal hours as HH:mm
+    private static string FormatHours(double? hours)
+    {
+        if (!hours.HasValue)
+            return "-";
+
+        var totalMinutes = (int)Math.Round(hours.Value * 60, MidpointRounding.AwayFromZero);
+        var h = totalMinutes / 60;
+        var m = totalMinutes % 60;
+
+        return $"{h:00}:{m:00}";
+    }
+}

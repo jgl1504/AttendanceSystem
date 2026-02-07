@@ -256,4 +256,24 @@ public class AttendanceController : ControllerBase
         public Guid? SiteId { get; set; }
     }
 
+    [HttpGet("list-range")]
+    public async Task<ActionResult<IEnumerable<AttendanceListItemDto>>> GetListRange(
+    [FromQuery] DateTime from,
+    [FromQuery] DateTime to,
+    [FromQuery] int? employeeId,
+    [FromQuery] int? departmentId)
+    {
+        var fromDate = from.Date;
+        var toDateExclusive = to.Date.AddDays(1); // make upper bound inclusive
+
+        var records = await _attendanceService.GetByDateRangeAsync(
+            fromDate,
+            toDateExclusive,
+            employeeId,
+            departmentId);
+
+        return Ok(records);
+    }
+
+
 }

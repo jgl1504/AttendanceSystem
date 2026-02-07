@@ -441,22 +441,22 @@ public class AttendanceService
                 {
                     if (dept.WorksSunday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
                     }
                 }
                 else if (isSaturday)
                 {
                     if (dept.WorksSaturday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
                     }
                 }
                 else
                 {
-                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
-                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
+                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
+                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
                 }
             }
 
@@ -477,6 +477,7 @@ public class AttendanceService
 
         return rows;
     }
+
 
     public async Task<bool> SaveQuickEntryAsync(int employeeId, DateTime date, string? clockInTime, string? clockOutTime, int clockedByEmployeeId)
     {
@@ -565,9 +566,206 @@ public class AttendanceService
         return true;
     }
 
+    public async Task<List<AttendanceListItemDto>> GetByDateRangeAsync(
+    DateTime fromLocalInclusive,
+    DateTime toLocalExclusive,
+    int? employeeId,
+    int? departmentId)
+    {
+        // convert local range to UTC like GetByDateInternalAsync does
+        var startUtc = DateTime.SpecifyKind(fromLocalInclusive.Date, DateTimeKind.Local).ToUniversalTime();
+        var endUtc = DateTime.SpecifyKind(toLocalExclusive.Date, DateTimeKind.Local).ToUniversalTime();
+
+        var query = _context.AttendanceRecords
+            .Include(a => a.Employee)
+                .ThenInclude(e => e.Department)
+            .Include(a => a.OvertimeApprovedByEmployee)
+            .Include(a => a.Site)
+            .Where(a => a.ClockInTime >= startUtc && a.ClockInTime < endUtc);
+
+        if (employeeId.HasValue && employeeId.Value > 0)
+        {
+            query = query.Where(a => a.EmployeeId == employeeId.Value);
+        }
+
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            query = query.Where(a => a.Employee.DepartmentId == departmentId.Value);
+        }
+
+        var records = await query
+            .OrderBy(a => a.ClockInTime)
+            .ToListAsync();
+
+        // 1) segment hours (same as in GetByDateInternalAsync)
+        foreach (var a in records)
+        {
+            double? hoursWorked = null;
+            if (a.ClockOutTime.HasValue)
+            {
+                var total = (a.ClockOutTime.Value - a.ClockInTime).TotalHours;
+                hoursWorked = Math.Round(Math.Max(0, total), 2);
+            }
+            a.HoursWorked = hoursWorked;
+        }
+
+        // 2) DAILY totals per employee *per day*
+        var dailyGroups = records
+            .GroupBy(a => new { a.EmployeeId, Day = a.ClockInTime.ToLocalTime().Date })
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var first = g.First();
+                    var dept = first.Employee.Department!;
+
+                    var anyClockIn = first.ClockInTime.ToLocalTime();
+                    var dayOfWeek = anyClockIn.DayOfWeek;
+
+                    var weekdayExpectedPerDay = dept.RequiredHoursPerWeek / 5m;
+
+                    bool isSunday = dayOfWeek == DayOfWeek.Sunday;
+                    bool isSaturday = dayOfWeek == DayOfWeek.Saturday;
+                    bool isPublicHoliday = false; // TODO
+
+                    double expectedHours;
+
+                    if (isSunday || isPublicHoliday)
+                    {
+                        if (dept.WorksSunday)
+                            expectedHours = (double)dept.SundayHours;
+                        else
+                            expectedHours = 0.0;
+                    }
+                    else if (isSaturday)
+                    {
+                        if (dept.WorksSaturday)
+                            expectedHours = (double)dept.SaturdayHours;
+                        else
+                            expectedHours = 0.0;
+                    }
+                    else
+                    {
+                        expectedHours = (double)weekdayExpectedPerDay;
+                    }
+
+                    var totalHoursForDay = g.Sum(x => x.HoursWorked ?? 0);
+                    var rawOvertime = Math.Max(0, totalHoursForDay - expectedHours);
+
+                    var anyApproved = g.Any(x => x.OvertimeStatus == OvertimeStatus.Approved);
+                    var anyDenied = g.Any(x => x.OvertimeStatus == OvertimeStatus.Denied);
+                    OvertimeStatus status;
+                    if (rawOvertime <= 0)
+                    {
+                        status = OvertimeStatus.None;
+                    }
+                    else if (anyApproved)
+                    {
+                        status = OvertimeStatus.Approved;
+                    }
+                    else if (anyDenied)
+                    {
+                        status = OvertimeStatus.Denied;
+                    }
+                    else
+                    {
+                        status = OvertimeStatus.Pending;
+                    }
+
+                    double weekdayOt = 0;
+                    double sundayHolidayOt = 0;
+
+                    if (rawOvertime > 0)
+                    {
+                        if (isSunday || isPublicHoliday)
+                            sundayHolidayOt = rawOvertime;
+                        else
+                            weekdayOt = rawOvertime;
+                    }
+
+                    return new
+                    {
+                        ExpectedHours = Math.Round(expectedHours, 2),
+                        TotalHours = Math.Round(totalHoursForDay, 2),
+                        OvertimeHours = Math.Round(rawOvertime, 2),
+                        WeekdayOvertime = Math.Round(weekdayOt, 2),
+                        SundayHolidayOvertime = Math.Round(sundayHolidayOt, 2),
+                        Status = status
+                    };
+                });
+
+        // 3) project DTOs, attaching per‑day overtime info
+        var list = new List<AttendanceListItemDto>();
+
+        foreach (var a in records)
+        {
+            var dayKey = new { a.EmployeeId, Day = a.ClockInTime.ToLocalTime().Date };
+            var daily = dailyGroups[dayKey];
+
+            a.OvertimeHours = daily.OvertimeHours;
+            a.WeekdayOvertimeHours = daily.WeekdayOvertime;
+            a.SundayPublicOvertimeHours = daily.SundayHolidayOvertime;
+            a.OvertimeStatus = daily.Status;
+
+            double? normalHours = null;
+            double? driverHours = null;
+            double? breakdownHours = null;
+
+            if (a.WorkCategory == WorkCategory.Normal)
+                normalHours = a.HoursWorked;
+            else if (a.WorkCategory == WorkCategory.Driver)
+                driverHours = a.HoursWorked;
+            else if (a.WorkCategory == WorkCategory.Breakdown)
+                breakdownHours = a.HoursWorked;
+
+            list.Add(new AttendanceListItemDto
+            {
+                Id = a.Id,
+                EmployeeName = a.Employee.Name,
+                ClockInTime = a.ClockInTime,
+                ClockOutTime = a.ClockOutTime,
+                ClockInLatitude = a.ClockInLatitude,
+                ClockInLongitude = a.ClockInLongitude,
+                ClockOutLatitude = a.ClockOutLatitude,
+                ClockOutLongitude = a.ClockOutLongitude,
+
+                HoursWorked = a.HoursWorked,
+
+                ExpectedHours = daily.ExpectedHours,
+                OvertimeHours = daily.OvertimeHours,
+                WeekdayOvertimeHours = daily.WeekdayOvertime,
+                SundayPublicOvertimeHours = daily.SundayHolidayOvertime,
+                OvertimeStatus = daily.Status,
+
+                WorkCategory = a.WorkCategory,
+                NormalHours = normalHours,
+                DriverHours = driverHours,
+                BreakdownHours = breakdownHours,
+
+                SiteId = a.SiteId,
+                SiteName = a.Site?.Name,
+
+                OvertimeLocation = a.OvertimeLocation,
+                OvertimeNote = a.OvertimeNote,
+                OvertimeApprovedByName = a.OvertimeApprovedByEmployee != null
+                    ? a.OvertimeApprovedByEmployee.Name
+                    : null,
+                OvertimeDecisionTime = a.OvertimeDecisionTime
+            });
+        }
+
+        // if you don’t need to persist anything, you can remove this SaveChanges
+        await _context.SaveChangesAsync();
+
+        return list;
+    }
+
+
     public async Task<AttendanceRecord?> GetRecordForDecisionAsync(int id)
         => await _context.AttendanceRecords.FindAsync(id);
 
     public Task<int> SaveChangesAsync()
         => _context.SaveChangesAsync();
+
+
 }

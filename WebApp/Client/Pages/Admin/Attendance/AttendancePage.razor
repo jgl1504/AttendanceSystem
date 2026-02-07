@@ -7,8 +7,13 @@
 
 <div class="row mb-3">
     <div class="col-md-3 col-6 mb-2">
-        <label class="form-label">Date</label>
-        <InputDate @bind-Value="selectedDate" class="form-control" />
+        <label class="form-label">From date</label>
+        <InputDate @bind-Value="fromDate" class="form-control" />
+    </div>
+
+    <div class="col-md-3 col-6 mb-2">
+        <label class="form-label">To date</label>
+        <InputDate @bind-Value="toDate" class="form-control" />
     </div>
 
     <div class="col-md-3 col-6 mb-2">
@@ -31,7 +36,7 @@
                 <option value="@e.Id">@e.Name</option>
             }
         </select>
-        @if (selectedEmployeeId > 0 && selectedDate.Date == DateTime.Today)
+        @if (selectedEmployeeId > 0 && toDate.Date == DateTime.Today)
         {
             <button class="btn btn-sm btn-outline-danger mt-2" @onclick="ClearTodayRecord">
                 Clear Today's Record
@@ -55,130 +60,138 @@
     </div>
 </div>
 
-@if (records is null)
+@if (groupedRecords is null)
 {
     <p>Loading...</p>
 }
-else if (!records.Any())
+else if (!groupedRecords.Any())
 {
     <p>No records for the selected filters.</p>
 }
 else
 {
-    <table class="table table-sm">
-        <thead>
-            <tr>
-                <th>Employee</th>
-                <th>Site</th>
-                <th>Category</th>
-                <th>Clock In</th>
-                <th>Clock Out</th>
-                <th>Hours</th>
-                <th>Expected</th>
-                <th>Weekday OT</th>
-                <th>Sun/Holiday OT</th>
-                <th>OT Status</th>
-                <th>OT Note</th>
-                <th>Approved By</th>
-                <th>Clock In Location</th>
-                <th>Clock Out Location</th>
-                <th>Edit</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var r in records)
-            {
+    @foreach (var day in groupedRecords)
+    {
+        <h5>@day.Date.ToString("yyyy-MM-dd")</h5>
+
+        <table class="table table-sm mb-4">
+            <thead>
                 <tr>
-                    <td>@r.EmployeeName</td>
-                    <td>
-                        <select class="form-select form-select-sm" @onchange="(e) => OnSiteChanged(e, r)">
-                            <option value="">-- Select site --</option>
-                            @foreach (var site in allSites)
+                    <th>Employee</th>
+                    <th>Site</th>
+                    <th>Category</th>
+                    <th>Clock In</th>
+                    <th>Clock Out</th>
+                    <th>Hours</th>
+                    <th>Expected</th>
+                    <th>Weekday OT</th>
+                    <th>Sun/Holiday OT</th>
+                    <th>OT Status</th>
+                    <th>OT Note</th>
+                    <th>Approved By</th>
+                    <th>Clock In Location</th>
+                    <th>Clock Out Location</th>
+                    <th>Edit</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in day.Records)
+                {
+                    <tr>
+                        <td>@r.EmployeeName</td>
+                        <td>
+                            <select class="form-select form-select-sm" @onchange="(e) => OnSiteChanged(e, r)">
+                                <option value="">-- Select site --</option>
+                                @foreach (var site in allSites)
+                                {
+                                    <option value="@site.Id" selected="@(r.SiteId == site.Id)">@site.Name</option>
+                                }
+                            </select>
+                        </td>
+                        <td>@r.WorkCategory</td>
+                        <td>@r.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
+                        <td>@(r.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
+
+                        <!-- CHANGED: use HH:mm formatter for all totals -->
+                        <td>@FormatHours(r.HoursWorked)</td>
+                        <td>@FormatHours(r.ExpectedHours)</td>
+                        <td>@FormatHours(r.WeekdayOvertimeHours)</td>
+                        <td>@FormatHours(r.SundayPublicOvertimeHours)</td>
+
+                        <td>
+                            @if (r.OvertimeHours.HasValue && r.OvertimeHours.Value > 0)
                             {
-                                <option value="@site.Id" selected="@(r.SiteId == site.Id)">@site.Name</option>
-                            }
-                        </select>
-                    </td>
-                    <td>@r.WorkCategory</td>
-                    <td>@r.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
-                    <td>@(r.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
-                    <td>@(r.HoursWorked?.ToString("0.00") ?? "-")</td>
-                    <td>@(r.ExpectedHours?.ToString("0.00") ?? "-")</td>
-                    <td>@(r.WeekdayOvertimeHours?.ToString("0.00") ?? "-")</td>
-                    <td>@(r.SundayPublicOvertimeHours?.ToString("0.00") ?? "-")</td>
-                    <td>
-                        @if (r.OvertimeHours.HasValue && r.OvertimeHours.Value > 0)
-                        {
-                            <span>
-                                @(r.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
-                                                    r.OvertimeStatus == OvertimeStatus.Denied ? "Denied" :
-                                                    "Pending")
+                                <span>
+                                    @(r.OvertimeStatus == OvertimeStatus.Approved ? "Approved" :
+                                                        r.OvertimeStatus == OvertimeStatus.Denied ? "Denied" :
+                                                        "Pending")
                 </span>
 
                 @if (r.OvertimeStatus == OvertimeStatus.Pending)
-                            {
-                                <button class="btn btn-sm btn-outline-success ms-2"
-                                        @onclick="() => ApproveOvertime(r)">
-                                    Approve
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger ms-1"
-                                        @onclick="() => DenyOvertime(r)">
-                                    Deny
-                                </button>
+                                {
+                                    <button class="btn btn-sm btn-outline-success ms-2"
+                                            @onclick="() => ApproveOvertime(r)">
+                                        Approve
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger ms-1"
+                                            @onclick="() => DenyOvertime(r)">
+                                        Deny
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary ms-2"
+                                            @onclick="() => ResetOvertime(r)">
+                                        Reopen
+                                    </button>
+                                }
                             }
                             else
                             {
-                                <button class="btn btn-sm btn-outline-secondary ms-2"
-                                        @onclick="() => ResetOvertime(r)">
-                                    Reopen
-                                </button>
+                                <span>-</span>
                             }
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </td>
-                    <td>
-                        <InputText @bind-Value="r.OvertimeNote"
-                                   class="form-control form-control-sm"
-                                   placeholder="Note / reason" />
-                    </td>
-                    <td>@(string.IsNullOrWhiteSpace(r.OvertimeApprovedByName) ? "-" : r.OvertimeApprovedByName)</td>
-                    <td>
-                        @if (r.ClockInLatitude.HasValue && r.ClockInLongitude.HasValue)
-                        {
-                            <a href="@GetInMapUrl(r)" target="_blank">View on map</a>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </td>
-                    <td>
-                        @if (r.ClockOutLatitude.HasValue && r.ClockOutLongitude.HasValue)
-                        {
-                            <a href="@GetOutMapUrl(r)" target="_blank">View on map</a>
-                        }
-                        else
-                        {
-                            <span>-</span>
-                        }
-                    </td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-secondary me-1"
-                                @onclick="() => StartEdit(r)">
-                            Edit
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger"
-                                @onclick="() => DeleteRecord(r)">
-                            Delete
-                        </button>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+                        </td>
+                        <td>
+                            <InputText @bind-Value="r.OvertimeNote"
+                                       class="form-control form-control-sm"
+                                       placeholder="Note / reason" />
+                        </td>
+                        <td>@(string.IsNullOrWhiteSpace(r.OvertimeApprovedByName) ? "-" : r.OvertimeApprovedByName)</td>
+                        <td>
+                            @if (r.ClockInLatitude.HasValue && r.ClockInLongitude.HasValue)
+                            {
+                                <a href="@GetInMapUrl(r)" target="_blank">View on map</a>
+                            }
+                            else
+                            {
+                                <span>-</span>
+                            }
+                        </td>
+                        <td>
+                            @if (r.ClockOutLatitude.HasValue && r.ClockOutLongitude.HasValue)
+                            {
+                                <a href="@GetOutMapUrl(r)" target="_blank">View on map</a>
+                            }
+                            else
+                            {
+                                <span>-</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                    @onclick="() => StartEdit(r)">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="() => DeleteRecord(r)">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }
 
 @if (editing is not null)
@@ -265,8 +278,18 @@ else
         </div>
     </div>
 }
+
 @code {
     private List<AttendanceListItemDto>? records;
+
+    // grouped view
+    private List<AttendanceDayGroup>? groupedRecords;
+
+    private class AttendanceDayGroup
+    {
+        public DateTime Date { get; set; }
+        public List<AttendanceListItemDto> Records { get; set; } = new();
+    }
 
     // Reuse EmployeeDto from employees page
     private List<EmployeeDto> employees = new();
@@ -276,7 +299,8 @@ else
     private List<DepartmentDto> departments = new();
     private int selectedDepartmentId = 0;
 
-    private DateTime selectedDate = DateTime.Today;
+    private DateTime fromDate = DateTime.Today;
+    private DateTime toDate = DateTime.Today;
     private int selectedEmployeeId = 0;
     private int selectedApproverId = 0;
 
@@ -289,7 +313,6 @@ else
     private string? clockOutTimeText = "";
     private string? editError;
 
-    // NEW: Site management
     private List<Site> allSites = new();
     private string editSiteId = "";
 
@@ -297,7 +320,7 @@ else
     {
         departments = await Http.GetFromJsonAsync<List<DepartmentDto>>("api/departments") ?? new();
         employees = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/employees") ?? new();
-        allSites = await Http.GetFromJsonAsync<List<Site>>("api/sites") ?? new(); // Load all sites
+        allSites = await Http.GetFromJsonAsync<List<Site>>("api/sites") ?? new();
 
         filteredEmployees = employees
             .OrderBy(e => e.Name)
@@ -312,8 +335,10 @@ else
 
     private async Task LoadRecords()
     {
-        var dateString = selectedDate.ToString("yyyy-MM-dd");
-        var url = $"api/attendance/list?date={dateString}";
+        if (toDate < fromDate)
+            toDate = fromDate;
+
+        var url = $"api/attendance/list-range?from={fromDate:yyyy-MM-dd}&to={toDate:yyyy-MM-dd}";
 
         if (selectedEmployeeId > 0)
         {
@@ -328,6 +353,17 @@ else
         records = await Http.GetFromJsonAsync<List<AttendanceListItemDto>>(url) ?? new();
         editing = null;
         editError = null;
+
+        groupedRecords = records
+            .OrderBy(r => r.ClockInTime)
+            .GroupBy(r => r.ClockInTime.ToLocalTime().Date)
+            .Select(g => new AttendanceDayGroup
+            {
+                Date = g.Key,
+                Records = g.ToList()
+            })
+            .OrderBy(g => g.Date)
+            .ToList();
     }
 
     private void OnDepartmentChanged(ChangeEventArgs e)
@@ -358,7 +394,6 @@ else
         selectedEmployeeId = 0;
     }
 
-    // NEW: Handle site change in table row
     private async Task OnSiteChanged(ChangeEventArgs e, AttendanceListItemDto record)
     {
         var siteIdString = e.Value?.ToString();
@@ -369,7 +404,6 @@ else
             newSiteId = parsed;
         }
 
-        // Update the record's SiteId via API
         var updateDto = new
         {
             Id = record.Id,
@@ -420,12 +454,10 @@ else
             clockOutTimeText = "";
         }
 
-        // Set site for editing
         editSiteId = r.SiteId?.ToString() ?? "";
 
         editError = null;
 
-        // Scroll to edit form after render
         try
         {
             await Task.Delay(100);
@@ -433,10 +465,8 @@ else
         }
         catch
         {
-            // Scroll failed, ignore
         }
     }
-
 
     private void CancelEdit()
     {
@@ -478,7 +508,6 @@ else
             return;
         }
 
-        // Update site separately if changed
         Guid? newSiteId = null;
         if (!string.IsNullOrWhiteSpace(editSiteId) && Guid.TryParse(editSiteId, out var parsed))
         {
@@ -496,6 +525,17 @@ else
         row.SiteName = allSites.FirstOrDefault(s => s.Id == newSiteId)?.Name;
 
         editing = null;
+
+        groupedRecords = records
+            .OrderBy(r => r.ClockInTime)
+            .GroupBy(r => r.ClockInTime.ToLocalTime().Date)
+            .Select(g => new AttendanceDayGroup
+            {
+                Date = g.Key,
+                Records = g.ToList()
+            })
+            .OrderBy(g => g.Date)
+            .ToList();
     }
 
     private async Task DeleteRecord(AttendanceListItemDto r)
@@ -514,6 +554,17 @@ else
             editing = null;
             editError = null;
         }
+
+        groupedRecords = records
+            .OrderBy(x => x.ClockInTime)
+            .GroupBy(x => x.ClockInTime.ToLocalTime().Date)
+            .Select(g => new AttendanceDayGroup
+            {
+                Date = g.Key,
+                Records = g.ToList()
+            })
+            .OrderBy(g => g.Date)
+            .ToList();
     }
 
     private async Task ApproveOvertime(AttendanceListItemDto r)
@@ -633,5 +684,18 @@ else
 
         await JS.InvokeVoidAsync("alert", "Today's record cleared. Employee can now clock in fresh.");
         await LoadRecords();
+    }
+
+    // NEW: format decimal hours as HH:mm
+    private static string FormatHours(double? hours)
+    {
+        if (!hours.HasValue)
+            return "-";
+
+        var totalMinutes = (int)Math.Round(hours.Value * 60, MidpointRounding.AwayFromZero);
+        var h = totalMinutes / 60;
+        var m = totalMinutes % 60;
+
+        return $"{h:00}:{m:00}";
     }
 }
