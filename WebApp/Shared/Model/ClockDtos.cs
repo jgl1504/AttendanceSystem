@@ -49,21 +49,22 @@
         // New: category of this record if you show segments in a flat list
         public WorkCategory WorkCategory { get; set; } = WorkCategory.Normal;
 
-        // NEW: Site name for display
+        // Site
         public Guid? SiteId { get; set; }
         public string? SiteName { get; set; }
 
-        // New overtime detail fields for approval UI
-        public string? OvertimeLocation { get; set; }          // where overtime happened (e.g. Dischem)
-        public string? OvertimeNote { get; set; }              // approver's free-text message
-        public string? OvertimeApprovedByName { get; set; }    // who approved/rejected
-        public DateTime? OvertimeDecisionTime { get; set; }    // when decision was made
+        // Overtime detail fields for approval UI
+        public string? OvertimeLocation { get; set; }
+        public string? OvertimeNote { get; set; }
+        public string? OvertimeApprovedByName { get; set; }
+        public DateTime? OvertimeDecisionTime { get; set; }
 
         // Convenience flags for the UI
         public bool HasOvertime => (OvertimeHours ?? 0) > 0;
         public bool IsOvertimeApproved => OvertimeStatus == OvertimeStatus.Approved;
         public bool IsOvertimePending => OvertimeStatus == OvertimeStatus.Pending;
     }
+
 
     public class AttendanceEditDto
     {

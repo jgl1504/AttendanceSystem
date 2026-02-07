@@ -74,7 +74,7 @@ public class AttendanceService
             ClockInLatitude = request.Latitude,
             ClockInLongitude = request.Longitude,
             WorkCategory = request.WorkCategory,
-            SiteId = request.SiteId,  // NEW: Store selected site
+            SiteId = request.SiteId,  // Store selected site
             OvertimeStatus = OvertimeStatus.None,
             OvertimeLocation = null,
             OvertimeNote = null,
@@ -129,9 +129,9 @@ public class AttendanceService
     }
 
     private async Task<List<AttendanceListItemDto>> GetByDateInternalAsync(
-    DateTime dayLocal,
-    int? employeeId,
-    int? departmentId)
+        DateTime dayLocal,
+        int? employeeId,
+        int? departmentId)
     {
         var startLocal = dayLocal.Date;
         var endLocal = startLocal.AddDays(1);
@@ -143,7 +143,7 @@ public class AttendanceService
             .Include(a => a.Employee)
                 .ThenInclude(e => e.Department)
             .Include(a => a.OvertimeApprovedByEmployee)
-            .Include(a => a.Site)  // NEW: Include site data
+            .Include(a => a.Site)  // Include site data
             .Where(a => a.ClockInTime >= startUtc && a.ClockInTime < endUtc);
 
         if (employeeId.HasValue && employeeId.Value > 0)
@@ -175,7 +175,7 @@ public class AttendanceService
             a.HoursWorked = hoursWorked;
         }
 
-        // 2) Group by employee + date to compute DAILY totals
+        // 2) Group by employee to compute DAILY totals
         var dailyGroups = records
             .GroupBy(a => a.EmployeeId)
             .ToDictionary(
@@ -310,9 +310,11 @@ public class AttendanceService
                 DriverHours = driverHours,
                 BreakdownHours = breakdownHours,
 
-                // NEW: Site info
+                // Site info
+                SiteId = a.SiteId,
                 SiteName = a.Site?.Name,
 
+                // Overtime detail
                 OvertimeLocation = a.OvertimeLocation,
                 OvertimeNote = a.OvertimeNote,
                 OvertimeApprovedByName = a.OvertimeApprovedByEmployee != null
@@ -401,6 +403,7 @@ public class AttendanceService
         await _context.SaveChangesAsync();
         return true;
     }
+
     public async Task<List<QuickEntryRowDto>> GetQuickEntryDataAsync(DateTime date)
     {
         var dayLocal = date.Date;
@@ -438,22 +441,22 @@ public class AttendanceService
                 {
                     if (dept.WorksSunday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
                     }
                 }
                 else if (isSaturday)
                 {
                     if (dept.WorksSaturday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
                     }
                 }
                 else
                 {
-                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
-                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
+                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
+                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
                 }
             }
 
@@ -474,8 +477,6 @@ public class AttendanceService
 
         return rows;
     }
-
-
 
     public async Task<bool> SaveQuickEntryAsync(int employeeId, DateTime date, string? clockInTime, string? clockOutTime, int clockedByEmployeeId)
     {
@@ -570,5 +571,3 @@ public class AttendanceService
     public Task<int> SaveChangesAsync()
         => _context.SaveChangesAsync();
 }
-
-
