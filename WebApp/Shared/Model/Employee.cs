@@ -1,4 +1,6 @@
-﻿namespace WebApp.Shared.Model
+﻿using System;
+
+namespace WebApp.Shared.Model
 {
     public class Employee
     {
@@ -12,6 +14,14 @@
 
         public int DepartmentId { get; set; }          // NOT nullable
         public Department? Department { get; set; }    // nav can stay nullable
+
+        // NEW: Gender
+        public Gender Gender { get; set; } = Gender.Other;
+
+        // NEW: Company / Tenant
+        public int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
 
         // Auth fields (for JWT)
         public byte[] PasswordHash { get; set; } = Array.Empty<byte>();

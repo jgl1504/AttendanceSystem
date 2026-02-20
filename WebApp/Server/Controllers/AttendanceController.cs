@@ -1,7 +1,8 @@
-﻿using System.Security.Claims;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using WebApp.Server.Services.Attendance;
 using WebApp.Shared.Model;
+using WebApp.Shared.Model.Payroll;
 
 namespace WebApp.Server.Controllers;
 
@@ -258,10 +259,11 @@ public class AttendanceController : ControllerBase
 
     [HttpGet("list-range")]
     public async Task<ActionResult<IEnumerable<AttendanceListItemDto>>> GetListRange(
-    [FromQuery] DateTime from,
-    [FromQuery] DateTime to,
-    [FromQuery] int? employeeId,
-    [FromQuery] int? departmentId)
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] int? employeeId,
+        [FromQuery] int? departmentId,
+        [FromQuery] int? companyId)
     {
         var fromDate = from.Date;
         var toDateExclusive = to.Date.AddDays(1); // make upper bound inclusive
@@ -270,10 +272,69 @@ public class AttendanceController : ControllerBase
             fromDate,
             toDateExclusive,
             employeeId,
-            departmentId);
+            departmentId,
+            companyId);
 
         return Ok(records);
     }
 
+    [HttpGet("payroll-hours")]
+    public async Task<ActionResult<IEnumerable<PayrollHoursRowDto>>> GetPayrollHours(
+       [FromQuery] DateTime from,
+       [FromQuery] DateTime to,
+       [FromQuery] int? employeeId,
+       [FromQuery] int? departmentId,
+       [FromQuery] int? companyId)
+    {
+        var fromDate = from.Date;
+        var toDateExclusive = to.Date.AddDays(1); // inclusive upper bound
 
+        var records = await _attendanceService.GetByDateRangeAsync(
+            fromDate,
+            toDateExclusive,
+            employeeId,
+            departmentId,
+            companyId);
+
+        // records: IEnumerable<AttendanceListItemDto>
+
+        var grouped = records
+            .GroupBy(r => r.EmployeeName)
+            .Select(g => new PayrollHoursRowDto
+            {
+                EmployeeName = g.Key,
+
+                // Normal hours for the period (NormalHours field)
+                NormalHours = g.Sum(r => r.NormalHours ?? 0d),
+
+                // Approved weekday overtime
+                OvertimeApproved = g
+                    .Where(r => r.OvertimeStatus == OvertimeStatus.Approved)
+                    .Sum(r => r.WeekdayOvertimeHours ?? 0d),
+
+                // Approved Sunday/public overtime
+                OvertimeSundayApproved = g
+                    .Where(r => r.OvertimeStatus == OvertimeStatus.Approved)
+                    .Sum(r => r.SundayPublicOvertimeHours ?? 0d),
+
+                // Approved driver overtime (segments marked as Driver)
+                DriverApproved = g
+                    .Where(r => r.OvertimeStatus == OvertimeStatus.Approved
+                             && r.WorkCategory == WorkCategory.Driver)
+                    .Sum(r => r.DriverHours ?? 0d)
+            })
+            .ToList();
+
+        return Ok(grouped);
+    }
+
+    [HttpGet("leave-monthly-report")]
+    public async Task<ActionResult<IEnumerable<LeaveMonthlyReportRowDto>>> GetLeaveMonthlyReport(
+        [FromQuery] int year,
+        [FromQuery] int? employeeId,
+        [FromQuery] int? departmentId)
+    {
+        var rows = await _attendanceService.GetLeaveMonthlyReportAsync(year, employeeId, departmentId);
+        return Ok(rows);
+    }
 }

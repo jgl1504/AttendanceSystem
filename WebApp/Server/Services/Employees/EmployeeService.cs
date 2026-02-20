@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using WebApp.Server.Data;
 using WebApp.Shared.Model;
 
@@ -16,8 +15,9 @@ public class EmployeeService
 
     public async Task<List<Employee>> GetAllAsync()
     {
-        // Just include Department once; no need to serialize Department.Employees
+        // Load both Company and Department, no back-references
         return await _context.Employees
+            .Include(e => e.Company)
             .Include(e => e.Department)
             .AsNoTracking()
             .ToListAsync();
@@ -25,6 +25,7 @@ public class EmployeeService
 
     public async Task<Employee?> GetByIdAsync(int id)
         => await _context.Employees
+            .Include(e => e.Company)
             .Include(e => e.Department)
             .FirstOrDefaultAsync(e => e.Id == id);
 
@@ -35,7 +36,7 @@ public class EmployeeService
         return employee;
     }
 
-    // New: simple helper used by the controller after mapping DTO -> entity
+    // helper used by the controller after mapping DTO -> entity
     public Task<int> SaveChangesAsync()
         => _context.SaveChangesAsync();
 
@@ -63,7 +64,7 @@ public class EmployeeService
         return true;
     }
 
-    // New: clear password so employee can perform first-time login flow again
+    // clear password so employee can perform first-time login flow again
     public async Task<bool> ClearEmployeePasswordAsync(int employeeId)
     {
         var employee = await _context.Employees.FindAsync(employeeId);

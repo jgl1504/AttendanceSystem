@@ -15,7 +15,6 @@ public class AttendanceService
 
     public async Task<ClockStatusDto> GetStatusAsync(int employeeId)
     {
-        // 1) Prefer any open record (no ClockOutTime), regardless of date
         var openRecord = await _context.AttendanceRecords
             .Where(a => a.EmployeeId == employeeId && a.ClockOutTime == null)
             .OrderByDescending(a => a.ClockInTime)
@@ -31,7 +30,6 @@ public class AttendanceService
             };
         }
 
-        // 2) No open record – fall back to last closed record
         var lastRecord = await _context.AttendanceRecords
             .Where(a => a.EmployeeId == employeeId)
             .OrderByDescending(a => a.ClockInTime)
@@ -74,7 +72,7 @@ public class AttendanceService
             ClockInLatitude = request.Latitude,
             ClockInLongitude = request.Longitude,
             WorkCategory = request.WorkCategory,
-            SiteId = request.SiteId,  // Store selected site
+            SiteId = request.SiteId,
             OvertimeStatus = OvertimeStatus.None,
             OvertimeLocation = null,
             OvertimeNote = null,
@@ -143,7 +141,7 @@ public class AttendanceService
             .Include(a => a.Employee)
                 .ThenInclude(e => e.Department)
             .Include(a => a.OvertimeApprovedByEmployee)
-            .Include(a => a.Site)  // Include site data
+            .Include(a => a.Site)
             .Where(a => a.ClockInTime >= startUtc && a.ClockInTime < endUtc);
 
         if (employeeId.HasValue && employeeId.Value > 0)
@@ -160,8 +158,6 @@ public class AttendanceService
             .OrderBy(a => a.ClockInTime)
             .ToListAsync();
 
-        // 1) Compute HoursWorked per segment (record) WITHOUT subtracting daily break,
-        //    so short segments like 20:08–20:29 show their actual duration.
         foreach (var a in records)
         {
             double? hoursWorked = null;
@@ -175,7 +171,6 @@ public class AttendanceService
             a.HoursWorked = hoursWorked;
         }
 
-        // 2) Group by employee to compute DAILY totals
         var dailyGroups = records
             .GroupBy(a => a.EmployeeId)
             .ToDictionary(
@@ -192,7 +187,7 @@ public class AttendanceService
 
                     bool isSunday = dayOfWeek == DayOfWeek.Sunday;
                     bool isSaturday = dayOfWeek == DayOfWeek.Saturday;
-                    bool isPublicHoliday = false; // TODO
+                    bool isPublicHoliday = false;
 
                     double expectedHours;
 
@@ -260,7 +255,6 @@ public class AttendanceService
                     };
                 });
 
-        // 3) Project per record DTO, attaching daily overtime info
         var list = new List<AttendanceListItemDto>();
 
         foreach (var a in records)
@@ -294,27 +288,22 @@ public class AttendanceService
                 ClockOutLatitude = a.ClockOutLatitude,
                 ClockOutLongitude = a.ClockOutLongitude,
 
-                // Segment hours
                 HoursWorked = a.HoursWorked,
 
-                // DAILY expected/OT
                 ExpectedHours = daily.ExpectedHours,
                 OvertimeHours = daily.OvertimeHours,
                 WeekdayOvertimeHours = daily.WeekdayOvertime,
                 SundayPublicOvertimeHours = daily.SundayHolidayOvertime,
                 OvertimeStatus = daily.Status,
 
-                // Category info
                 WorkCategory = a.WorkCategory,
                 NormalHours = normalHours,
                 DriverHours = driverHours,
                 BreakdownHours = breakdownHours,
 
-                // Site info
                 SiteId = a.SiteId,
                 SiteName = a.Site?.Name,
 
-                // Overtime detail
                 OvertimeLocation = a.OvertimeLocation,
                 OvertimeNote = a.OvertimeNote,
                 OvertimeApprovedByName = a.OvertimeApprovedByEmployee != null
@@ -441,22 +430,22 @@ public class AttendanceService
                 {
                     if (dept.WorksSunday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
                     }
                 }
                 else if (isSaturday)
                 {
                     if (dept.WorksSaturday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
                     }
                 }
                 else
                 {
-                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
-                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
+                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
+                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
                 }
             }
 
@@ -477,7 +466,6 @@ public class AttendanceService
 
         return rows;
     }
-
 
     public async Task<bool> SaveQuickEntryAsync(int employeeId, DateTime date, string? clockInTime, string? clockOutTime, int clockedByEmployeeId)
     {
@@ -531,7 +519,7 @@ public class AttendanceService
                 ClockInTime = clockInUtc.Value,
                 ClockOutTime = clockOutUtc,
                 WorkCategory = WorkCategory.Normal,
-                SiteId = null,  // Quick entry doesn't capture site
+                SiteId = null,
                 OvertimeStatus = OvertimeStatus.None,
                 OvertimeLocation = null,
                 OvertimeNote = null,
@@ -566,19 +554,22 @@ public class AttendanceService
         return true;
     }
 
+    // UPDATED: added companyId filter parameter
     public async Task<List<AttendanceListItemDto>> GetByDateRangeAsync(
-    DateTime fromLocalInclusive,
-    DateTime toLocalExclusive,
-    int? employeeId,
-    int? departmentId)
+        DateTime fromLocalInclusive,
+        DateTime toLocalExclusive,
+        int? employeeId,
+        int? departmentId,
+        int? companyId)   // <-- NEW
     {
-        // convert local range to UTC like GetByDateInternalAsync does
         var startUtc = DateTime.SpecifyKind(fromLocalInclusive.Date, DateTimeKind.Local).ToUniversalTime();
         var endUtc = DateTime.SpecifyKind(toLocalExclusive.Date, DateTimeKind.Local).ToUniversalTime();
 
         var query = _context.AttendanceRecords
             .Include(a => a.Employee)
                 .ThenInclude(e => e.Department)
+            .Include(a => a.Employee)              // ensure Employee is included once
+                .ThenInclude(e => e.Company)       // <-- ensure Company is loaded
             .Include(a => a.OvertimeApprovedByEmployee)
             .Include(a => a.Site)
             .Where(a => a.ClockInTime >= startUtc && a.ClockInTime < endUtc);
@@ -593,11 +584,15 @@ public class AttendanceService
             query = query.Where(a => a.Employee.DepartmentId == departmentId.Value);
         }
 
+        if (companyId.HasValue && companyId.Value > 0)
+        {
+            query = query.Where(a => a.Employee.CompanyId == companyId.Value);   // <-- filter by company
+        }
+
         var records = await query
             .OrderBy(a => a.ClockInTime)
             .ToListAsync();
 
-        // 1) segment hours (same as in GetByDateInternalAsync)
         foreach (var a in records)
         {
             double? hoursWorked = null;
@@ -609,7 +604,6 @@ public class AttendanceService
             a.HoursWorked = hoursWorked;
         }
 
-        // 2) DAILY totals per employee *per day*
         var dailyGroups = records
             .GroupBy(a => new { a.EmployeeId, Day = a.ClockInTime.ToLocalTime().Date })
             .ToDictionary(
@@ -626,7 +620,7 @@ public class AttendanceService
 
                     bool isSunday = dayOfWeek == DayOfWeek.Sunday;
                     bool isSaturday = dayOfWeek == DayOfWeek.Saturday;
-                    bool isPublicHoliday = false; // TODO
+                    bool isPublicHoliday = false;
 
                     double expectedHours;
 
@@ -694,7 +688,6 @@ public class AttendanceService
                     };
                 });
 
-        // 3) project DTOs, attaching per‑day overtime info
         var list = new List<AttendanceListItemDto>();
 
         foreach (var a in records)
@@ -754,12 +747,9 @@ public class AttendanceService
             });
         }
 
-        // if you don’t need to persist anything, you can remove this SaveChanges
         await _context.SaveChangesAsync();
-
         return list;
     }
-
 
     public async Task<AttendanceRecord?> GetRecordForDecisionAsync(int id)
         => await _context.AttendanceRecords.FindAsync(id);
@@ -767,5 +757,200 @@ public class AttendanceService
     public Task<int> SaveChangesAsync()
         => _context.SaveChangesAsync();
 
+    // ===== LEAVE MONTHLY REPORT =====
 
+    public enum LeavePool
+    {
+        Annual,
+        Sick,
+        Special,
+        Unpaid
+    }
+
+    private static LeavePool MapLeaveTypeToPool(string leaveTypeName)
+    {
+        var name = leaveTypeName.Trim().ToLowerInvariant();
+
+        if (name.Contains("annual"))
+            return LeavePool.Annual;
+
+        if (name.Contains("sick"))
+            return LeavePool.Sick;
+
+        if (name.Contains("unpaid"))
+            return LeavePool.Unpaid;
+
+        return LeavePool.Special;
+    }
+
+    private static (decimal annual, decimal sick, decimal special, decimal unpaid) AddToPools(
+        decimal days,
+        LeavePool pool,
+        decimal annual,
+        decimal sick,
+        decimal special,
+        decimal unpaid)
+    {
+        switch (pool)
+        {
+            case LeavePool.Annual:
+                annual += days;
+                break;
+            case LeavePool.Sick:
+                sick += days;
+                break;
+            case LeavePool.Special:
+                special += days;
+                break;
+            case LeavePool.Unpaid:
+                unpaid += days;
+                break;
+        }
+
+        return (annual, sick, special, unpaid);
+    }
+
+    public async Task<List<LeaveMonthlyReportRowDto>> GetLeaveMonthlyReportAsync(
+        int year,
+        int? employeeId,
+        int? departmentId)
+    {
+        var query = _context.LeaveRecords
+            .Include(l => l.Employee)
+                .ThenInclude(e => e.Department)
+            .Include(l => l.LeaveType)
+            .Where(l =>
+                l.Status == LeaveStatus.Approved &&
+                l.StartDate.Year == year);
+
+        if (employeeId.HasValue && employeeId.Value > 0)
+        {
+            query = query.Where(l => l.EmployeeId == employeeId.Value);
+        }
+
+        if (departmentId.HasValue && departmentId.Value > 0)
+        {
+            query = query.Where(l => l.Employee.DepartmentId == departmentId.Value);
+        }
+
+        var records = await query.ToListAsync();
+
+        var empGroups = records
+            .GroupBy(l => new { l.EmployeeId, l.Employee.Name })
+            .ToList();
+
+        var result = new List<LeaveMonthlyReportRowDto>();
+
+        foreach (var emp in empGroups)
+        {
+            var row = new LeaveMonthlyReportRowDto
+            {
+                EmployeeId = emp.Key.EmployeeId,
+                EmployeeName = emp.Key.Name
+            };
+
+            decimal balanceAnnual = 0;
+            decimal balanceSick = 0;
+            decimal balanceSpecial = 0;
+            decimal balanceUnpaid = 0;
+
+            var monthly = emp
+                .Select(r => new
+                {
+                    Month = r.StartDate.Month,
+                    Pool = MapLeaveTypeToPool(r.LeaveType.Name),
+                    r.DaysTaken
+                })
+                .GroupBy(x => new { x.Month, x.Pool })
+                .Select(g => new
+                {
+                    g.Key.Month,
+                    g.Key.Pool,
+                    Days = g.Sum(x => x.DaysTaken)
+                })
+                .ToList();
+
+            foreach (var m in monthly)
+            {
+                switch (m.Month)
+                {
+                    case 1:
+                        (row.JanAnnual, row.JanSick, row.JanSpecial, row.JanUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.JanAnnual, row.JanSick, row.JanSpecial, row.JanUnpaid);
+                        break;
+                    case 2:
+                        (row.FebAnnual, row.FebSick, row.FebSpecial, row.FebUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.FebAnnual, row.FebSick, row.FebSpecial, row.FebUnpaid);
+                        break;
+                    case 3:
+                        (row.MarAnnual, row.MarSick, row.MarSpecial, row.MarUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.MarAnnual, row.MarSick, row.MarSpecial, row.MarUnpaid);
+                        break;
+                    case 4:
+                        (row.AprAnnual, row.AprSick, row.AprSpecial, row.AprUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.AprAnnual, row.AprSick, row.AprSpecial, row.AprUnpaid);
+                        break;
+                    case 5:
+                        (row.MayAnnual, row.MaySick, row.MaySpecial, row.MayUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.MayAnnual, row.MaySick, row.MaySpecial, row.MayUnpaid);
+                        break;
+                    case 6:
+                        (row.JunAnnual, row.JunSick, row.JunSpecial, row.JunUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.JunAnnual, row.JunSick, row.JunSpecial, row.JunUnpaid);
+                        break;
+                    case 7:
+                        (row.JulAnnual, row.JulSick, row.JulSpecial, row.JulUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.JulAnnual, row.JulSick, row.JulSpecial, row.JulUnpaid);
+                        break;
+                    case 8:
+                        (row.AugAnnual, row.AugSick, row.AugSpecial, row.AugUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.AugAnnual, row.AugSick, row.AugSpecial, row.AugUnpaid);
+                        break;
+                    case 9:
+                        (row.SepAnnual, row.SepSick, row.SepSpecial, row.SepUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.SepAnnual, row.SepSick, row.SepSpecial, row.SepUnpaid);
+                        break;
+                    case 10:
+                        (row.OctAnnual, row.OctSick, row.OctSpecial, row.OctUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.OctAnnual, row.OctSick, row.OctSpecial, row.OctUnpaid);
+                        break;
+                    case 11:
+                        (row.NovAnnual, row.NovSick, row.NovSpecial, row.NovUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.NovAnnual, row.NovSick, row.NovSpecial, row.NovUnpaid);
+                        break;
+                    case 12:
+                        (row.DecAnnual, row.DecSick, row.DecSpecial, row.DecUnpaid) =
+                            AddToPools(m.Days, m.Pool, row.DecAnnual, row.DecSick, row.DecSpecial, row.DecUnpaid);
+                        break;
+                }
+
+                switch (m.Pool)
+                {
+                    case LeavePool.Annual:
+                        balanceAnnual += m.Days;
+                        break;
+                    case LeavePool.Sick:
+                        balanceSick += m.Days;
+                        break;
+                    case LeavePool.Special:
+                        balanceSpecial += m.Days;
+                        break;
+                    case LeavePool.Unpaid:
+                        balanceUnpaid += m.Days;
+                        break;
+                }
+            }
+
+            row.BalanceAnnual = balanceAnnual;
+            row.BalanceSick = balanceSick;
+            row.BalanceSpecial = balanceSpecial;
+            row.BalanceUnpaid = balanceUnpaid;
+
+            result.Add(row);
+        }
+
+        return result
+            .OrderBy(r => r.EmployeeName)
+            .ToList();
+    }
 }

@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using WebApp.Server.Services.Employees;
 using WebApp.Shared.Model;
 
@@ -31,6 +30,16 @@ public class EmployeesController : ControllerBase
                 Phone = e.Phone,
                 HireDate = e.HireDate,
                 IsActive = e.IsActive,
+
+                CompanyId = e.CompanyId,
+                Company = e.Company == null
+                    ? null
+                    : new CompanyDto
+                    {
+                        Id = e.Company.Id,
+                        Name = e.Company.Name
+                    },
+
                 DepartmentId = e.DepartmentId,
                 Department = e.Department == null
                     ? null
@@ -39,6 +48,7 @@ public class EmployeesController : ControllerBase
                         Id = e.Department.Id,
                         Name = e.Department.Name
                     },
+
                 Role = e.Role
             })
             .ToList();
@@ -60,6 +70,16 @@ public class EmployeesController : ControllerBase
             Phone = employee.Phone,
             HireDate = employee.HireDate,
             IsActive = employee.IsActive,
+
+            CompanyId = employee.CompanyId,
+            Company = employee.Company == null
+                ? null
+                : new CompanyDto
+                {
+                    Id = employee.Company.Id,
+                    Name = employee.Company.Name
+                },
+
             DepartmentId = employee.DepartmentId,
             Department = employee.Department == null
                 ? null
@@ -68,6 +88,7 @@ public class EmployeesController : ControllerBase
                     Id = employee.Department.Id,
                     Name = employee.Department.Name
                 },
+
             Role = employee.Role
         };
 
@@ -75,10 +96,27 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<Employee>> Create(Employee employee)
+    public async Task<ActionResult<EmployeeDto>> Create([FromBody] EmployeeDto dto)
     {
+        // map DTO -> entity
+        var employee = new Employee
+        {
+            Name = dto.Name,
+            Email = dto.Email,
+            Phone = dto.Phone,
+            HireDate = dto.HireDate,
+            IsActive = dto.IsActive,
+            CompanyId = dto.CompanyId,
+            DepartmentId = dto.DepartmentId,
+            Role = dto.Role
+        };
+
         var created = await _service.CreateAsync(employee);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+
+        // map back to DTO (id + keep FKs)
+        dto.Id = created.Id;
+
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, dto);
     }
 
     [HttpPut("{id:int}")]
@@ -95,10 +133,11 @@ public class EmployeesController : ControllerBase
         existing.Phone = dto.Phone;
         existing.HireDate = dto.HireDate;
         existing.IsActive = dto.IsActive;
+        existing.CompanyId = dto.CompanyId;
         existing.DepartmentId = dto.DepartmentId;
         existing.Role = dto.Role;
 
-        await _service.SaveChangesAsync(); // small helper in the service
+        await _service.SaveChangesAsync();
         return NoContent();
     }
 
@@ -111,7 +150,6 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPost("{id:int}/role")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> SetRole(int id, [FromBody] SetRoleRequest request)
     {
         var ok = await _service.SetEmployeeRoleAsync(id, request.RoleName);
@@ -119,7 +157,7 @@ public class EmployeesController : ControllerBase
         return NoContent();
     }
 
-    // New: reset custom employee password so they can do first-time login again
+    // reset custom employee password so they can do first-time login again
     [HttpPost("{id:int}/reset-password")]
     public async Task<IActionResult> ResetPassword(int id)
     {

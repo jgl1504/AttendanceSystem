@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using WebApp.Server.Configuration;
 using WebApp.Server.Data;
 using WebApp.Shared.Model;
+using WebApp.Shared.Model.Payroll;
 
 namespace WebApp.Server.Services.Leave
 {
@@ -274,6 +275,46 @@ namespace WebApp.Server.Services.Leave
             }
 
             return days;
+        }
+
+        // NEW: Get leave records for payroll report (approved only, for a date range)
+        public async Task<List<PayrollLeaveDetailDto>> GetLeaveRecordsForPeriodAsync(
+            DateTime from,
+            DateTime to,
+            int? employeeId = null,
+            int? departmentId = null)
+        {
+            var query = _context.LeaveRecords
+                .Include(r => r.Employee)
+                    .ThenInclude(e => e.Department)
+                .Include(r => r.LeaveType)
+                .Where(r => r.Status == LeaveStatus.Approved
+                            && r.StartDate >= from
+                            && r.StartDate <= to)
+                .AsQueryable();
+
+            if (employeeId.HasValue)
+                query = query.Where(r => r.EmployeeId == employeeId.Value);
+
+            if (departmentId.HasValue)
+                query = query.Where(r => r.Employee.DepartmentId == departmentId.Value);
+
+            var records = await query
+                .OrderBy(r => r.StartDate)
+                .ThenBy(r => r.Employee.Name)
+                .ToListAsync();
+
+            return records.Select(r => new PayrollLeaveDetailDto
+            {
+                EmployeeId = r.EmployeeId,
+                EmployeeName = r.Employee.Name,
+                DepartmentName = r.Employee.Department?.Name ?? "",
+                Type = r.LeaveType.Name,
+                FromDate = r.StartDate,
+                ToDate = r.EndDate,
+                Hours = r.DaysTaken * 8m, // Convert days to hours
+                Reason = r.Reason ?? "" // Use Reason instead of Notes
+            }).ToList();
         }
     }
 }

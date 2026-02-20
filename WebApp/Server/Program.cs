@@ -73,6 +73,8 @@ builder.Services.AddScoped<LeaveBalanceService>();
 builder.Services.AddScoped<LeaveService>();
 builder.Services.AddScoped<LeaveRequestService>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<LeaveDebugService>();
+builder.Services.AddScoped<CompanyService>();
 
 builder.Services.Configure<LeaveAttachmentsOptions>(
     builder.Configuration.GetSection("LeaveAttachments"));

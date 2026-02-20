@@ -1,9 +1,9 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using WebApp.Shared.Model;
 using System.Security.Cryptography;
 using System.Text;
+using WebApp.Shared.Model;
 
 namespace WebApp.Server.Data;
 
@@ -21,6 +21,7 @@ public class DataContext : IdentityDbContext<IdentityUser>
     public DbSet<Site> Sites { get; set; } = default!;
     public DbSet<LeaveType> LeaveTypes { get; set; } = default!;
     public DbSet<LeaveBalance> LeaveBalances { get; set; } = default!;
+    public DbSet<Company> Companies { get; set; } = default!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +35,14 @@ public class DataContext : IdentityDbContext<IdentityUser>
             entity.Property(d => d.RequiredHoursPerWeek).HasPrecision(5, 2);
             entity.Property(d => d.SaturdayHours).HasPrecision(4, 2);
             entity.Property(d => d.SundayHours).HasPrecision(4, 2);
+        });
+
+        // ===== COMPANY CONFIG =====
+        modelBuilder.Entity<Company>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Name).IsRequired().HasMaxLength(200);
+            entity.Property(c => c.Code).HasMaxLength(50);
         });
 
         // ===== EMPLOYEE CONFIG =====
@@ -50,6 +59,11 @@ public class DataContext : IdentityDbContext<IdentityUser>
             entity.HasOne(e => e.Department)
                   .WithMany(d => d.Employees)
                   .HasForeignKey(e => e.DepartmentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Company)
+                  .WithMany(c => c.Employees)
+                  .HasForeignKey(e => e.CompanyId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -114,12 +128,10 @@ public class DataContext : IdentityDbContext<IdentityUser>
         {
             entity.HasKey(lt => lt.Id);
 
-            // Precision for decimal fields
             entity.Property(lt => lt.DaysPerYear).HasPrecision(7, 2);
             entity.Property(lt => lt.DaysPerCycle).HasPrecision(7, 2);
             entity.Property(lt => lt.PaymentPercentage).HasPrecision(5, 2);
 
-            // Self-referencing for pool relationships
             entity.HasOne(lt => lt.PrimaryPoolLeaveType)
                   .WithMany()
                   .HasForeignKey(lt => lt.PrimaryPoolLeaveTypeId)
@@ -136,12 +148,11 @@ public class DataContext : IdentityDbContext<IdentityUser>
         {
             entity.HasKey(lb => lb.Id);
 
-            // Precision for decimal fields
             entity.Property(lb => lb.OpeningBalance)
                   .HasPrecision(9, 2);
 
             entity.Property(lb => lb.CurrentBalance)
-                  .HasPrecision(9, 2); // same precision for both
+                  .HasPrecision(9, 2);
 
             entity.HasOne(lb => lb.Employee)
                   .WithMany()
@@ -153,15 +164,14 @@ public class DataContext : IdentityDbContext<IdentityUser>
                   .HasForeignKey(lb => lb.LeaveTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
 
-            // Unique constraint: one balance per employee per leave type
             entity.HasIndex(lb => new { lb.EmployeeId, lb.LeaveTypeId })
                   .IsUnique();
         });
 
-
         // ===== SEED DATA =====
         SeedDepartments(modelBuilder);
         SeedIdentityUser(modelBuilder);
+        SeedCompanies(modelBuilder);
         SeedEmployees(modelBuilder);
     }
 
@@ -245,6 +255,17 @@ public class DataContext : IdentityDbContext<IdentityUser>
         modelBuilder.Entity<IdentityUser>().HasData(identityAdmin);
     }
 
+    private void SeedCompanies(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Company>().HasData(
+            new Company { Id = 1, Name = "AICS", Code = "AICS", IsActive = true },
+            new Company { Id = 2, Name = "WFE", Code = "WFE", IsActive = true },
+            new Company { Id = 3, Name = "TRICON", Code = "TRICON", IsActive = true },
+            new Company { Id = 4, Name = "THEOUTPOST", Code = "THEOUTPOST", IsActive = true },
+            new Company { Id = 5, Name = "AAS", Code = "AAS", IsActive = true }
+        );
+    }
+
     private void SeedEmployees(ModelBuilder modelBuilder)
     {
         var dummyHash = Encoding.UTF8.GetBytes("seed-hash");
@@ -260,10 +281,85 @@ public class DataContext : IdentityDbContext<IdentityUser>
                 HireDate = new DateTime(2025, 1, 1),
                 IsActive = true,
                 DepartmentId = 3,
+                CompanyId = 1,             // AICS
+                Gender = Gender.Female,    // if you want a default
                 IdentityUserId = "seed-admin-user-id",
                 Role = "Admin",
                 PasswordHash = dummyHash,
                 PasswordSalt = dummySalt
+            }
+        );
+
+        modelBuilder.Entity<LeaveType>().HasData(
+            new LeaveType
+            {
+                Id = new Guid("28606668-B6E2-431D-9785-1FB3AB3DAFE6"),
+                Name = "Maternity Leave",
+                AccrualType = LeaveAccrualType.Fixed,
+                DaysPerYear = 0m,
+                DaysPerCycle = 0m,
+                PaymentPercentage = 100m,
+                IsDeleted = false
+            },
+            new LeaveType
+            {
+                Id = new Guid("6F90F1BF-A17F-48B9-8DC5-5B63374D205F"),
+                Name = "Study Leave",
+                AccrualType = LeaveAccrualType.Fixed,
+                DaysPerYear = 0m,
+                DaysPerCycle = 0m,
+                PaymentPercentage = 100m,
+                IsDeleted = false
+            },
+            new LeaveType
+            {
+                Id = new Guid("7F80A868-B953-46D7-8A95-6DD2319AE491"),
+                Name = "Unpaid Leave",
+                AccrualType = LeaveAccrualType.None,
+                DaysPerYear = 0m,
+                DaysPerCycle = 0m,
+                PaymentPercentage = 0m,
+                IsDeleted = false
+            },
+            new LeaveType
+            {
+                Id = new Guid("F929540C-4B73-4E0C-B5D0-845C6A2FC4CF"),
+                Name = "Family Responsibility Leave",
+                AccrualType = LeaveAccrualType.Fixed,
+                DaysPerYear = 0m,
+                DaysPerCycle = 0m,
+                PaymentPercentage = 100m,
+                IsDeleted = false
+            },
+            new LeaveType
+            {
+                Id = new Guid("34DEEBAB-CEA1-42D3-A537-B45BFB594AAA"),
+                Name = "Sick Leave",
+                AccrualType = LeaveAccrualType.Cycle,
+                DaysPerYear = 0m,
+                DaysPerCycle = 0m,
+                PaymentPercentage = 100m,
+                IsDeleted = false
+            },
+            new LeaveType
+            {
+                Id = new Guid("FFF0BDDB-42BA-4CAB-8CC7-D02A6EE5B1C1"),
+                Name = "Annual Leave",
+                AccrualType = LeaveAccrualType.Annual,
+                DaysPerYear = 15m,
+                DaysPerCycle = 0m,
+                PaymentPercentage = 100m,
+                IsDeleted = false
+            },
+            new LeaveType
+            {
+                Id = new Guid("BADD5389-B6D5-4032-8A42-FBC9939C7AB4"),
+                Name = "Paternity Leave",
+                AccrualType = LeaveAccrualType.Fixed,
+                DaysPerYear = 0m,
+                DaysPerCycle = 0m,
+                PaymentPercentage = 100m,
+                IsDeleted = false
             }
         );
     }

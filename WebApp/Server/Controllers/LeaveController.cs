@@ -1,7 +1,10 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WebApp.Server.Services.Leave;
 using WebApp.Shared.Model;
+using WebApp.Shared.Model.Constants;
+using WebApp.Shared.Model.Payroll;
 
 namespace WebApp.Server.Controllers;
 
@@ -10,10 +13,7 @@ namespace WebApp.Server.Controllers;
 //[Authorize] // TEMP: disabled to match AttendanceController
 public class LeaveController : ControllerBase
 {
-    // Legacy balance + setup (EmployeeLeaves)
     private readonly LeaveService _leaveService;
-
-    // Requests, history, approve/reject (LeaveRecords)
     private readonly LeaveRequestService _leaveRequestService;
 
     public LeaveController(LeaveService leaveService, LeaveRequestService leaveRequestService)
@@ -22,25 +22,46 @@ public class LeaveController : ControllerBase
         _leaveRequestService = leaveRequestService;
     }
 
-    // ===== BALANCE (legacy EmployeeLeaves, used by request form card) =====
+    // ===== NEW BALANCE / SUMMARY (per leave type) =====
 
-    // GET api/leave/balance/5
-    [HttpGet("balance/{employeeId:int}")]
-    public async Task<ActionResult<EmployeeLeaveDto>> GetBalance(int employeeId)
-    {
-        var balance = await _leaveService.GetLeaveBalanceAsync(employeeId);
-        if (balance == null) return NotFound();
-        return Ok(balance);
-    }
-
-    // GET api/leave/balance-summary/5/{leaveTypeId}
-    // Used by admin page to see entitlement/taken/remaining for a specific type (Annual, Maternity, etc.)
+    // GET api/leave/balance-summary/{employeeId}/{leaveTypeId}?asAtDate=2026-03-31
     [HttpGet("balance-summary/{employeeId:int}/{leaveTypeId:guid}")]
-    public async Task<ActionResult<LeaveBalanceSummaryDto>> GetBalanceSummary(int employeeId, Guid leaveTypeId)
+    public async Task<ActionResult<LeaveBalanceSummaryDto>> GetBalanceSummary(
+        int employeeId,
+        Guid leaveTypeId,
+        [FromQuery] DateTime? asAtDate = null)
     {
-        var summary = await _leaveService.GetLeaveBalanceSummaryAsync(employeeId, leaveTypeId);
+        var date = (asAtDate ?? DateTime.Today).Date;
+        var summary = await _leaveService.GetLeaveSummaryAsync(employeeId, leaveTypeId, date);
         if (summary == null) return NotFound();
         return Ok(summary);
+    }
+
+    // GET api/leave/employee-balance-lines/{employeeId}?year=2026&month=3
+    [HttpGet("employee-balance-lines/{employeeId:int}")]
+    public async Task<ActionResult<List<EmployeeLeaveLineDto>>> GetEmployeeBalanceLines(
+        int employeeId,
+        [FromQuery] int year,
+        [FromQuery] int month)
+    {
+        if (year <= 0 || month < 1 || month > 12)
+            return BadRequest(new { message = "Invalid year or month." });
+
+        var data = await _leaveService.GetEmployeeLeaveLinesForMonthAsync(employeeId, year, month);
+        return Ok(data);
+    }
+
+    // GET api/leave/type-balances?year=2026&month=3
+    [HttpGet("type-balances")]
+    public async Task<ActionResult<List<LeaveTypeBalanceRowDto>>> GetLeaveTypeBalances(
+        [FromQuery] int year,
+        [FromQuery] int month)
+    {
+        if (year <= 0 || month < 1 || month > 12)
+            return BadRequest(new { message = "Invalid year or month." });
+
+        var data = await _leaveService.GetLeaveTypeBalancesForMonthAsync(year, month);
+        return Ok(data);
     }
 
     // ===== REQUESTS & HISTORY (LeaveRequestService) =====
@@ -70,7 +91,7 @@ public class LeaveController : ControllerBase
         return Ok();
     }
 
-    // NEW: POST api/leave/{id}/attachment  (multipart/form-data)
+    // POST api/leave/{id}/attachment  (multipart/form-data)
     [HttpPost("{id:int}/attachment")]
     public async Task<ActionResult> UploadAttachment(int id, IFormFile file)
     {
@@ -102,7 +123,6 @@ public class LeaveController : ControllerBase
     }
 
     // GET api/leave/attachment-url/10
-    // Returns a relative URL like /leave-attachments/{fileName} for the admin "View" button.
     [HttpGet("attachment-url/{id:int}")]
     public async Task<ActionResult<string>> GetAttachmentUrl(int id)
     {
@@ -114,25 +134,6 @@ public class LeaveController : ControllerBase
         return Ok(url);
     }
 
-    // ===== LEGACY SETUP SCREEN (admin /admin/leave/setup) =====
-
-    // GET api/leave/setup
-    [HttpGet("setup")]
-    public async Task<ActionResult<List<LeaveSetupRowDto>>> GetSetup()
-    {
-        var rows = await _leaveService.GetLeaveSetupAsync();
-        return Ok(rows);
-    }
-
-    // POST api/leave/setup
-    [HttpPost("setup")]
-    public async Task<ActionResult> SaveSetup([FromBody] LeaveSetupRowDto dto)
-    {
-        var ok = await _leaveService.SaveLeaveSetupAsync(dto);
-        if (!ok) return BadRequest(new { message = "Failed to save leave setup." });
-        return Ok();
-    }
-
     // POST api/leave/change-type/10
     [HttpPost("change-type/{id:int}")]
     public async Task<ActionResult> ChangeType(int id, [FromBody] Guid newLeaveTypeId)
@@ -142,4 +143,38 @@ public class LeaveController : ControllerBase
         return Ok();
     }
 
+    // GET api/leave/records?from=2026-02-01&to=2026-02-28&employeeId=5&departmentId=1
+    [HttpGet("records")]
+    public async Task<ActionResult<List<PayrollLeaveDetailDto>>> GetLeaveRecords(
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] int? employeeId = null,
+        [FromQuery] int? departmentId = null)
+    {
+        var records = await _leaveRequestService.GetLeaveRecordsForPeriodAsync(from, to, employeeId, departmentId);
+        return Ok(records);
+    }
+
+    // UPDATED: add companyId, departmentId, employeeId so UI filters can feed through
+    // GET api/leave/payroll-matrix?year=2026&month=3&companyId=1&departmentId=2&employeeId=5
+    [HttpGet("payroll-matrix")]
+    public async Task<ActionResult<List<PayrollLeaveRowDto>>> GetPayrollMatrix(
+        [FromQuery] int year,
+        [FromQuery] int month,
+        [FromQuery] int? companyId = null,
+        [FromQuery] int? departmentId = null,
+        [FromQuery] int? employeeId = null)
+    {
+        if (year <= 0 || month < 1 || month > 12)
+            return BadRequest(new { message = "Invalid year or month." });
+
+        var data = await _leaveService.GetPayrollLeaveMatrixAsync(
+            year,
+            month,
+            companyId,
+            departmentId,
+            employeeId);
+
+        return Ok(data);
+    }
 }

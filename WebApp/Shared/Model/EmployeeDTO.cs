@@ -25,6 +25,10 @@ namespace WebApp.Shared.Model
         public int DepartmentId { get; set; }
         public DepartmentDto? Department { get; set; }
 
+        // NEW: Company
+        public int CompanyId { get; set; }
+        public CompanyDto? Company { get; set; }
+
         public string Role { get; set; } = "Employee";
     }
 }

@@ -143,15 +143,15 @@ namespace WebApp.Server.Migrations
                         {
                             Id = "seed-admin-user-id",
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "ed513dc3-a05a-41d3-8493-e6c18af55d38",
+                            ConcurrencyStamp = "7193464c-d060-4921-bcd1-ccf0ad37e506",
                             Email = "Projects@aics.co.za",
                             EmailConfirmed = true,
                             LockoutEnabled = false,
                             NormalizedEmail = "PROJECTS@AICS.CO.ZA",
                             NormalizedUserName = "PROJECTS@AICS.CO.ZA",
-                            PasswordHash = "AQAAAAIAAYagAAAAELF5Fr5djG+94ssBKz/fj2DSqOY7Z8rkc7m/4Yb0ngcC56lzuJ3hjCcHfMT/teLhDQ==",
+                            PasswordHash = "AQAAAAIAAYagAAAAECSHYHmuWeTFLLXSHI0Hi4Vqdi4GimyV0Qnt47qqcPntXKZWb65UOD8lK4C8E3HIEw==",
                             PhoneNumberConfirmed = false,
-                            SecurityStamp = "e82816d5-6114-41c7-9b6b-70b3fe2d35ea",
+                            SecurityStamp = "a7f33eca-6b6e-49fb-a3c5-fcd1232c7430",
                             TwoFactorEnabled = false,
                             UserName = "Projects@aics.co.za"
                         });
@@ -320,6 +320,93 @@ namespace WebApp.Server.Migrations
                     b.ToTable("AttendanceRecords");
                 });
 
+            modelBuilder.Entity("WebApp.Shared.Model.Company", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Companies");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Code = "AICS",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7624),
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "AICS"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Code = "WFE",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7628),
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "WFE"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Code = "TRICON",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7630),
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "TRICON"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Code = "THEOUTPOST",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7632),
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "THEOUTPOST"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Code = "AAS",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7634),
+                            IsActive = true,
+                            IsDeleted = false,
+                            Name = "AAS"
+                        });
+                });
+
             modelBuilder.Entity("WebApp.Shared.Model.Department", b =>
                 {
                     b.Property<int>("Id")
@@ -444,6 +531,9 @@ namespace WebApp.Server.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("int");
+
                     b.Property<int>("DepartmentId")
                         .HasColumnType("int");
 
@@ -451,6 +541,9 @@ namespace WebApp.Server.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
+
+                    b.Property<int>("Gender")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("HireDate")
                         .HasColumnType("datetime2");
@@ -488,6 +581,8 @@ namespace WebApp.Server.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId");
+
                     b.HasIndex("DepartmentId");
 
                     b.ToTable("Employees");
@@ -496,8 +591,10 @@ namespace WebApp.Server.Migrations
                         new
                         {
                             Id = 1,
+                            CompanyId = 1,
                             DepartmentId = 3,
                             Email = "Projects@aics.co.za",
+                            Gender = 1,
                             HireDate = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             IdentityUserId = "seed-admin-user-id",
                             IsActive = true,
@@ -772,6 +869,176 @@ namespace WebApp.Server.Migrations
                     b.HasIndex("PrimaryPoolLeaveTypeId");
 
                     b.ToTable("LeaveTypes");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("28606668-b6e2-431d-9785-1fb3ab3dafe6"),
+                            AccrualType = 2,
+                            AllowsCarryover = true,
+                            AllowsHalfDays = true,
+                            ColorCode = "#3498db",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7779),
+                            DaysPerCycle = 0m,
+                            DaysPerYear = 0m,
+                            IsActive = true,
+                            IsDeleted = false,
+                            IsGenderSpecific = false,
+                            IsPaid = true,
+                            MaxCarryoverDays = 5,
+                            MaxConsecutiveDays = 0,
+                            MinNoticeDays = 0,
+                            Name = "Maternity Leave",
+                            PaymentPercentage = 100m,
+                            PoolType = 0,
+                            RequiresApproval = true,
+                            RequiresSupportingDocument = false,
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("6f90f1bf-a17f-48b9-8dc5-5b63374d205f"),
+                            AccrualType = 2,
+                            AllowsCarryover = true,
+                            AllowsHalfDays = true,
+                            ColorCode = "#3498db",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7800),
+                            DaysPerCycle = 0m,
+                            DaysPerYear = 0m,
+                            IsActive = true,
+                            IsDeleted = false,
+                            IsGenderSpecific = false,
+                            IsPaid = true,
+                            MaxCarryoverDays = 5,
+                            MaxConsecutiveDays = 0,
+                            MinNoticeDays = 0,
+                            Name = "Study Leave",
+                            PaymentPercentage = 100m,
+                            PoolType = 0,
+                            RequiresApproval = true,
+                            RequiresSupportingDocument = false,
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("7f80a868-b953-46d7-8a95-6dd2319ae491"),
+                            AccrualType = 4,
+                            AllowsCarryover = true,
+                            AllowsHalfDays = true,
+                            ColorCode = "#3498db",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7812),
+                            DaysPerCycle = 0m,
+                            DaysPerYear = 0m,
+                            IsActive = true,
+                            IsDeleted = false,
+                            IsGenderSpecific = false,
+                            IsPaid = true,
+                            MaxCarryoverDays = 5,
+                            MaxConsecutiveDays = 0,
+                            MinNoticeDays = 0,
+                            Name = "Unpaid Leave",
+                            PaymentPercentage = 0m,
+                            PoolType = 0,
+                            RequiresApproval = true,
+                            RequiresSupportingDocument = false,
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("f929540c-4b73-4e0c-b5d0-845c6a2fc4cf"),
+                            AccrualType = 2,
+                            AllowsCarryover = true,
+                            AllowsHalfDays = true,
+                            ColorCode = "#3498db",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7815),
+                            DaysPerCycle = 0m,
+                            DaysPerYear = 0m,
+                            IsActive = true,
+                            IsDeleted = false,
+                            IsGenderSpecific = false,
+                            IsPaid = true,
+                            MaxCarryoverDays = 5,
+                            MaxConsecutiveDays = 0,
+                            MinNoticeDays = 0,
+                            Name = "Family Responsibility Leave",
+                            PaymentPercentage = 100m,
+                            PoolType = 0,
+                            RequiresApproval = true,
+                            RequiresSupportingDocument = false,
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("34deebab-cea1-42d3-a537-b45bfb594aaa"),
+                            AccrualType = 1,
+                            AllowsCarryover = true,
+                            AllowsHalfDays = true,
+                            ColorCode = "#3498db",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7819),
+                            DaysPerCycle = 0m,
+                            DaysPerYear = 0m,
+                            IsActive = true,
+                            IsDeleted = false,
+                            IsGenderSpecific = false,
+                            IsPaid = true,
+                            MaxCarryoverDays = 5,
+                            MaxConsecutiveDays = 0,
+                            MinNoticeDays = 0,
+                            Name = "Sick Leave",
+                            PaymentPercentage = 100m,
+                            PoolType = 0,
+                            RequiresApproval = true,
+                            RequiresSupportingDocument = false,
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("fff0bddb-42ba-4cab-8cc7-d02a6ee5b1c1"),
+                            AccrualType = 0,
+                            AllowsCarryover = true,
+                            AllowsHalfDays = true,
+                            ColorCode = "#3498db",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7822),
+                            DaysPerCycle = 0m,
+                            DaysPerYear = 15m,
+                            IsActive = true,
+                            IsDeleted = false,
+                            IsGenderSpecific = false,
+                            IsPaid = true,
+                            MaxCarryoverDays = 5,
+                            MaxConsecutiveDays = 0,
+                            MinNoticeDays = 0,
+                            Name = "Annual Leave",
+                            PaymentPercentage = 100m,
+                            PoolType = 0,
+                            RequiresApproval = true,
+                            RequiresSupportingDocument = false,
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("badd5389-b6d5-4032-8a42-fbc9939c7ab4"),
+                            AccrualType = 2,
+                            AllowsCarryover = true,
+                            AllowsHalfDays = true,
+                            ColorCode = "#3498db",
+                            CreatedAt = new DateTime(2026, 2, 16, 20, 40, 3, 851, DateTimeKind.Utc).AddTicks(7825),
+                            DaysPerCycle = 0m,
+                            DaysPerYear = 0m,
+                            IsActive = true,
+                            IsDeleted = false,
+                            IsGenderSpecific = false,
+                            IsPaid = true,
+                            MaxCarryoverDays = 5,
+                            MaxConsecutiveDays = 0,
+                            MinNoticeDays = 0,
+                            Name = "Paternity Leave",
+                            PaymentPercentage = 100m,
+                            PoolType = 0,
+                            RequiresApproval = true,
+                            RequiresSupportingDocument = false,
+                            SortOrder = 0
+                        });
                 });
 
             modelBuilder.Entity("WebApp.Shared.Model.Site", b =>
@@ -909,11 +1176,19 @@ namespace WebApp.Server.Migrations
 
             modelBuilder.Entity("WebApp.Shared.Model.Employee", b =>
                 {
+                    b.HasOne("WebApp.Shared.Model.Company", "Company")
+                        .WithMany("Employees")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("WebApp.Shared.Model.Department", "Department")
                         .WithMany("Employees")
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Company");
 
                     b.Navigation("Department");
                 });
@@ -982,6 +1257,11 @@ namespace WebApp.Server.Migrations
                     b.Navigation("FallbackPoolLeaveType");
 
                     b.Navigation("PrimaryPoolLeaveType");
+                });
+
+            modelBuilder.Entity("WebApp.Shared.Model.Company", b =>
+                {
+                    b.Navigation("Employees");
                 });
 
             modelBuilder.Entity("WebApp.Shared.Model.Department", b =>

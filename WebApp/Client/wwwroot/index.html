@@ -63,12 +63,17 @@
             });
         };
 
-        // scroll helper for edit forms
+        // scroll helper for edit forms - scroll so element is near the bottom
         window.scrollToElement = function (selector) {
             var el = document.querySelector(selector);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (!el) {
+                return;
             }
+
+            var rect = el.getBoundingClientRect();
+            var absoluteTop = rect.top + window.scrollY;
+            var target = absoluteTop - (window.innerHeight - rect.height) + 20; // 20px padding
+            window.scrollTo({ top: target, behavior: 'smooth' });
         };
 
         // info popup for non-working day (Sunday-only) leave

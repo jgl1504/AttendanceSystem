@@ -1,0 +1,163 @@
+﻿@page "/admin/companies"
+
+@using WebApp.Shared.Model
+@inject HttpClient Http
+
+<PageTitle>Companies</PageTitle>
+
+<h2>Companies</h2>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <EditForm Model="@editCompany" OnValidSubmit="@SaveCompany">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Name</label>
+                <InputText class="form-control" @bind-Value="editCompany.Name" />
+                <ValidationMessage For="@(() => editCompany.Name)" />
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Code</label>
+                <InputText class="form-control" @bind-Value="editCompany.Code" />
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Active</label>
+                <div class="form-check mt-2">
+                    <InputCheckbox class="form-check-input" @bind-Value="editCompany.IsActive" />
+                </div>
+            </div>
+
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary me-2">
+                    @(editCompany.Id == 0 ? "Add Company" : "Save Changes")
+                </button>
+                @if (editCompany.Id != 0)
+                {
+                    <button type="button" class="btn btn-secondary" @onclick="CancelEdit">
+                        Cancel
+                    </button>
+                }
+            </div>
+        </div>
+    </EditForm>
+
+    <hr />
+
+    <h4>Existing Companies</h4>
+
+    @if (companies is null || !companies.Any())
+    {
+        <p class="text-muted">No companies configured yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Code</th>
+                    <th>Active</th>
+                    <th style="width: 180px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in companies)
+                {
+                    <tr class="@(!c.IsActive ? "table-secondary" : null)">
+                        <td>@c.Name</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.Code) ? "-" : c.Code)</td>
+                        <td>@(c.IsActive ? "Yes" : "No")</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => StartEdit(c)">
+                                Edit
+                            </button>
+                            @if (c.IsActive)
+                            {
+                                <button class="btn btn-sm btn-outline-warning" @onclick="() => SetActive(c, false)">
+                                    Deactivate
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-success" @onclick="() => SetActive(c, true)">
+                                    Activate
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private List<Company> companies = new();
+    private Company editCompany = new Company { Id = 0, IsActive = true };
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCompanies();
+    }
+
+    private async Task LoadCompanies()
+    {
+        isLoading = true;
+        companies = await Http.GetFromJsonAsync<List<Company>>("api/company")
+                    ?? new List<Company>();
+        isLoading = false;
+    }
+
+    private void StartEdit(Company c)
+    {
+        editCompany = new Company
+        {
+            Id = c.Id,
+            Name = c.Name,
+            Code = c.Code,
+            IsActive = c.IsActive
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editCompany = new Company { Id = 0, IsActive = true };
+    }
+
+    private async Task SaveCompany()
+    {
+        if (editCompany.Id == 0)
+        {
+            // create - POST
+            var response = await Http.PostAsJsonAsync("api/company", editCompany);
+            response.EnsureSuccessStatusCode();
+        }
+        else
+        {
+            // update - PUT
+            var response = await Http.PutAsJsonAsync($"api/company/{editCompany.Id}", editCompany);
+            response.EnsureSuccessStatusCode();
+        }
+
+        editCompany = new Company { Id = 0, IsActive = true };
+        await LoadCompanies();
+    }
+
+    private async Task SetActive(Company c, bool isActive)
+    {
+        c.IsActive = isActive;
+        var response = await Http.PutAsJsonAsync($"api/company/{c.Id}", c);
+        response.EnsureSuccessStatusCode();
+        await LoadCompanies();
+    }
+}

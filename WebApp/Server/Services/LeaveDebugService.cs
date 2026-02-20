@@ -4,13 +4,13 @@ using WebApp.Shared.Model;
 using WebApp.Shared.Model.Constants;
 using WebApp.Shared.Model.Payroll;
 
-namespace WebApp.Server.Services.Leave
+namespace WebApp.Server.Services
 {
-    public class LeaveService
+    public class LeaveDebugService
     {
         private readonly DataContext _context;
 
-        public LeaveService(DataContext context)
+        public LeaveDebugService(DataContext context)
         {
             _context = context;
         }
@@ -194,6 +194,9 @@ namespace WebApp.Server.Services.Leave
 
         // ==== INTERNAL HELPERS ===============================================
 
+        // SICK: 30 days per 3‑year cycle
+        // - If hired before AccrualHireDateCutOff: cycles from that cutoff
+        // - If hired after: must complete 4 months service, then cycles from hire date
         private async Task<LeaveBalanceSummaryDto> GetSickLeaveSummaryAsync(
             int employeeId,
             LeaveType leaveType,
@@ -216,14 +219,17 @@ namespace WebApp.Server.Services.Leave
                 };
             }
 
+            // Determine base cycle start
             DateTime cycleStart;
 
             if (employee.HireDate.Date < LeaveConstants.AccrualHireDateCutOff.Date)
             {
+                // Old employees: start sick cycles from global cut‑off
                 cycleStart = LeaveConstants.AccrualHireDateCutOff.Date;
             }
             else
             {
+                // New employees: must complete 4 months service
                 var qualifiesFrom = employee.HireDate.AddMonths(4);
 
                 if (asAtDate.Date < qualifiesFrom.Date)
@@ -251,6 +257,7 @@ namespace WebApp.Server.Services.Leave
                 };
             }
 
+            // Work out which 3‑year block we’re in from cycleStart
             var yearsSinceStart = asAtDate.Year - cycleStart.Year;
 
             if (asAtDate.Month < cycleStart.Month ||
@@ -310,6 +317,8 @@ namespace WebApp.Server.Services.Leave
             };
         }
 
+        // === Helper for generic taken calculation ===========================
+
         private Task<decimal> GetTakenLeaveAsync(int employeeId, Guid leaveTypeId, DateTime asAtDate)
         {
             return _context.LeaveRecords
@@ -319,6 +328,8 @@ namespace WebApp.Server.Services.Leave
                             && r.StartDate.Date <= asAtDate.Date)
                 .SumAsync(r => r.DaysTaken);
         }
+
+        // === Parental / maternity / paternity helpers =======================
 
         private static bool IsParentalLeaveType(LeaveType leaveType)
         {
@@ -340,13 +351,15 @@ namespace WebApp.Server.Services.Leave
             return name.Contains("Paternity", StringComparison.OrdinalIgnoreCase);
         }
 
+        // Once-off entitlement per event
+        // Maternity: 120 days (4 months) per event, Paternity: 10 days per event.[web:57][web:61]
         private static decimal GetParentalEntitlementPerEvent(LeaveType leaveType)
         {
             if (IsMaternity(leaveType))
-                return 120m;   // 4 months[web:57]
+                return 120m;
 
             if (IsPaternity(leaveType))
-                return 10m;    // 10 days[web:57]
+                return 10m;
 
             return 10m;
         }
@@ -363,6 +376,7 @@ namespace WebApp.Server.Services.Leave
             var balanceRow = await _context.LeaveBalances
                 .FirstOrDefaultAsync(b => b.EmployeeId == employeeId && b.LeaveTypeId == leaveType.Id);
 
+            // === SPECIAL: parental / maternity / paternity – 10/120 consecutive days, 12‑month block (stateless) ===
             if (IsParentalLeaveType(leaveType))
             {
                 var employee = await _context.Employees
@@ -467,6 +481,8 @@ namespace WebApp.Server.Services.Leave
                     AccruedSinceStart = 0m
                 };
             }
+
+            // === DEFAULT STANDARD HANDLING =========================================
 
             if (balanceRow != null)
             {
@@ -655,82 +671,5 @@ namespace WebApp.Server.Services.Leave
                 AccruedSinceStart = accruedSinceStart
             };
         }
-
-        // UPDATED: add optional employee/department/company filters
-        public async Task<List<PayrollLeaveRowDto>> GetPayrollLeaveMatrixAsync(
-            int year,
-            int month,
-            int? companyId,
-            int? departmentId,
-            int? employeeId)
-        {
-            if (year <= 0 || month < 1 || month > 12)
-                throw new ArgumentOutOfRangeException(nameof(month), "Invalid year or month.");
-
-            var cur = new DateTime(year, month, 1);
-            var prev = cur.AddMonths(-1);
-            var asAt = new DateTime(prev.Year, prev.Month, DateTime.DaysInMonth(prev.Year, prev.Month));
-
-            var employeesQuery = _context.Employees
-                .Include(e => e.Department)
-                .Include(e => e.Company)
-                .AsQueryable();
-
-            if (companyId.HasValue && companyId.Value > 0)
-            {
-                employeesQuery = employeesQuery.Where(e => e.CompanyId == companyId.Value);
-            }
-
-            if (departmentId.HasValue && departmentId.Value > 0)
-            {
-                employeesQuery = employeesQuery.Where(e => e.DepartmentId == departmentId.Value);
-            }
-
-            if (employeeId.HasValue && employeeId.Value > 0)
-            {
-                employeesQuery = employeesQuery.Where(e => e.Id == employeeId.Value);
-            }
-
-            var employees = await employeesQuery
-                .OrderBy(e => e.Name)
-                .ToListAsync();
-
-            var annualId = LeaveTypeIds.Annual;
-            var sickId = LeaveTypeIds.Sick;
-            var unpaidId = LeaveTypeIds.Unpaid;
-            var frId = LeaveTypeIds.FamilyResponsibility;
-            var maternityId = LeaveTypeIds.Maternity;
-            var paternityId = LeaveTypeIds.Paternity;
-
-            var result = new List<PayrollLeaveRowDto>();
-
-            foreach (var emp in employees)
-            {
-                var row = new PayrollLeaveRowDto
-                {
-                    EmployeeId = emp.Id,
-                    EmployeeName = emp.Name
-                };
-
-                var annual = await GetLeaveSummaryAsync(emp.Id, annualId, asAt);
-                var sick = await GetLeaveSummaryAsync(emp.Id, sickId, asAt);
-                var unpaid = await GetLeaveSummaryAsync(emp.Id, unpaidId, asAt);
-                var fr = await GetLeaveSummaryAsync(emp.Id, frId, asAt);
-                var mat = await GetLeaveSummaryAsync(emp.Id, maternityId, asAt);
-                var pat = await GetLeaveSummaryAsync(emp.Id, paternityId, asAt);
-
-                row.AnnualLeave = annual?.Remaining ?? 0m;
-                row.SickLeave = sick?.Remaining ?? 0m;
-                row.UnpaidLeave = unpaid?.Remaining ?? 0m;
-                row.FamilyResponsibility = fr?.Remaining ?? 0m;
-                row.MaternityLeave = mat?.Remaining ?? 0m;
-                row.PaternityLeave = pat?.Remaining ?? 0m;
-
-                result.Add(row);
-            }
-
-            return result;
-        }
-
     }
 }

@@ -51,6 +51,7 @@ else
                 <tr>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Company</th>
                     <th>Department</th>
                     <th class="text-center">Active</th>
                     <th class="text-center">Role</th>
@@ -71,6 +72,7 @@ else
                         <td>
                             <a href="mailto:@e.Email">@e.Email</a>
                         </td>
+                        <td>@e.Company?.Name</td>
                         <td>@e.Department?.Name</td>
                         <td class="text-center">
                             @if (e.IsActive)
@@ -126,6 +128,16 @@ else
             <InputText class="form-control" @bind-Value="editEmployee.Phone" />
         </div>
         <div class="mb-2">
+            <label>Company</label>
+            <InputSelect class="form-control" @bind-Value="editEmployee.CompanyId">
+                <option value="0">-- Select --</option>
+                @foreach (var c in companies)
+                {
+                    <option value="@c.Id">@c.Name</option>
+                }
+            </InputSelect>
+        </div>
+        <div class="mb-2">
             <label>Department</label>
             <InputSelect class="form-control" @bind-Value="editEmployee.DepartmentId">
                 <option value="0">-- Select --</option>
@@ -170,6 +182,7 @@ else
 @code {
     private List<EmployeeDto>? employees;
     private List<DepartmentDto> departments = new();
+    private List<CompanyDto> companies = new();
 
     // Filters
     private string nameFilter = "";
@@ -177,6 +190,7 @@ else
     private List<string> departmentNames = new();
 
     private EmployeeDto editEmployee = new();
+    private bool scrollToEditForm;
 
     private IEnumerable<EmployeeDto> filteredEmployees =>
         (employees ?? Enumerable.Empty<EmployeeDto>())
@@ -192,6 +206,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         departments = await Http.GetFromJsonAsync<List<DepartmentDto>>("api/departments") ?? new();
+        companies = await Http.GetFromJsonAsync<List<CompanyDto>>("api/company") ?? new();
         employees = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/employees") ?? new();
 
         departmentNames = employees
@@ -204,7 +219,23 @@ else
         Reset();
     }
 
-    private async Task Edit(EmployeeDto e)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (scrollToEditForm)
+        {
+            scrollToEditForm = false;
+            try
+            {
+                await JS.InvokeVoidAsync("scrollToElement", "#employee-edit-form");
+            }
+            catch
+            {
+                // ignore if JS not ready
+            }
+        }
+    }
+
+    private void Edit(EmployeeDto e)
     {
         editEmployee = new EmployeeDto
         {
@@ -216,15 +247,17 @@ else
             IsActive = e.IsActive,
             DepartmentId = e.DepartmentId,
             Department = e.Department,
+            CompanyId = e.CompanyId,
+            Company = e.Company,
             Role = e.Role
         };
 
-        await JS.InvokeVoidAsync("scrollToElement", "#employee-edit-form");
+        scrollToEditForm = true;
     }
 
     private async Task Save()
     {
-        if (editEmployee.DepartmentId == 0)
+        if (editEmployee.DepartmentId == 0 || editEmployee.CompanyId == 0)
             return;
 
         var duplicate = employees!
@@ -259,6 +292,7 @@ else
             if (created != null)
             {
                 created.Department = departments.FirstOrDefault(d => d.Id == created.DepartmentId);
+                created.Company = companies.FirstOrDefault(c => c.Id == created.CompanyId);
                 employees!.Add(created);
             }
         }
@@ -278,7 +312,9 @@ else
             existing.HireDate = editEmployee.HireDate;
             existing.IsActive = editEmployee.IsActive;
             existing.DepartmentId = editEmployee.DepartmentId;
+            existing.CompanyId = editEmployee.CompanyId;
             existing.Department = departments.FirstOrDefault(d => d.Id == editEmployee.DepartmentId);
+            existing.Company = companies.FirstOrDefault(c => c.Id == editEmployee.CompanyId);
             existing.Role = editEmployee.Role;
         }
 
@@ -344,7 +380,9 @@ else
         {
             IsActive = true,
             HireDate = DateTime.Now,
-            Role = "Employee"
+            Role = "Employee",
+            DepartmentId = 0,
+            CompanyId = 0
         };
     }
 }

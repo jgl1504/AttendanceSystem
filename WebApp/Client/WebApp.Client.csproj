@@ -14,6 +14,7 @@
     <!-- Auth + JWT + local storage -->
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="7.0.9" />
     <PackageReference Include="Blazored.LocalStorage" Version="4.3.0" />
+    <PackageReference Include="MudBlazor" Version="8.15.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.32.0" />
   </ItemGroup>
 
