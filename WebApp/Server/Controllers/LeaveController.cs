@@ -1,10 +1,16 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 using WebApp.Server.Services.Leave;
 using WebApp.Shared.Model;
 using WebApp.Shared.Model.Constants;
 using WebApp.Shared.Model.Payroll;
+using ClosedXML.Excel;
 
 namespace WebApp.Server.Controllers;
 
@@ -155,7 +161,6 @@ public class LeaveController : ControllerBase
         return Ok(records);
     }
 
-    // UPDATED: add companyId, departmentId, employeeId so UI filters can feed through
     // GET api/leave/payroll-matrix?year=2026&month=3&companyId=1&departmentId=2&employeeId=5
     [HttpGet("payroll-matrix")]
     public async Task<ActionResult<List<PayrollLeaveRowDto>>> GetPayrollMatrix(
@@ -176,5 +181,62 @@ public class LeaveController : ControllerBase
             employeeId);
 
         return Ok(data);
+    }
+
+    // Excel export using the SAME data and filters as payroll-matrix
+    // GET api/leave/payroll-matrix/export?year=2026&month=3&companyId=1&departmentId=2&employeeId=5
+    [HttpGet("payroll-matrix/export")]
+    public async Task<IActionResult> ExportPayrollMatrix(
+        [FromQuery] int year,
+        [FromQuery] int month,
+        [FromQuery] int? companyId = null,
+        [FromQuery] int? departmentId = null,
+        [FromQuery] int? employeeId = null)
+    {
+        if (year <= 0 || month < 1 || month > 12)
+            return BadRequest(new { message = "Invalid year or month." });
+
+        var data = await _leaveService.GetPayrollLeaveMatrixAsync(
+            year,
+            month,
+            companyId,
+            departmentId,
+            employeeId);
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Payroll Leave");
+
+        // Header
+        ws.Cell(1, 1).Value = "Employee";
+        ws.Cell(1, 2).Value = "AnnualLeave";
+        ws.Cell(1, 3).Value = "PaternityLeave";
+        ws.Cell(1, 4).Value = "MaternityLeave";
+        ws.Cell(1, 5).Value = "SickLeave";
+        ws.Cell(1, 6).Value = "UnpaidLeave";
+        ws.Cell(1, 7).Value = "FamilyResponsibility";
+
+        var rowIndex = 2;
+        foreach (var row in data)
+        {
+            ws.Cell(rowIndex, 1).Value = row.EmployeeName;
+            ws.Cell(rowIndex, 2).Value = row.AnnualLeave;
+            ws.Cell(rowIndex, 3).Value = row.PaternityLeave;
+            ws.Cell(rowIndex, 4).Value = row.MaternityLeave;
+            ws.Cell(rowIndex, 5).Value = row.SickLeave;
+            ws.Cell(rowIndex, 6).Value = row.UnpaidLeave;
+            ws.Cell(rowIndex, 7).Value = row.FamilyResponsibility;
+            rowIndex++;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        var content = stream.ToArray();
+
+        const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        var fileName = $"PayrollLeave_{year}_{month:00}.xlsx";
+
+        return File(content, contentType, fileName);
     }
 }

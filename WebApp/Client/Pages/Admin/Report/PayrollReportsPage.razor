@@ -115,6 +115,25 @@
             </li>
         </ul>
 
+        <div class="mb-3 mt-2">
+            @if (activeTab == "time")
+            {
+                <a class="btn btn-outline-secondary"
+                   href="@GetPayrollTimeExportUrl()"
+                   target="_blank">
+                    Export Time & Overtime (CSV)
+                </a>
+            }
+            else if (activeTab == "leavePayroll")
+            {
+                <a class="btn btn-outline-secondary"
+                   href="@GetPayrollLeaveExportUrl()"
+                   target="_blank">
+                    Export Leave (CSV)
+                </a>
+            }
+        </div>
+
         <div class="tab-content border border-top-0 p-3">
             @if (activeTab == "time")
             {
@@ -250,21 +269,18 @@
     }
     private DateTime PrevMonthEnd => PrevMonthStart.AddMonths(1).AddDays(-1);
 
-    // NEW: When user selects month M, use 16th of previous month -> 16th of selected month
     private DateTime PayrollStart
     {
         get
         {
             var selected = new DateTime(SelectedYear, SelectedMonth, 1);
-            var prev = selected.AddMonths(-1);         // previous calendar month
-            return new DateTime(prev.Year, prev.Month, 16); // 16th of previous month
+            var prev = selected.AddMonths(-1);
+            return new DateTime(prev.Year, prev.Month, 16);
         }
     }
 
-    // Exclusive end bound: 16th of selected month
     private DateTime PayrollEnd
         => new DateTime(SelectedYear, SelectedMonth, 16);
-
 
     protected override async Task OnInitializedAsync()
     {
@@ -362,6 +378,7 @@
 
             try
             {
+                // REVERTED: back to your original working endpoint
                 var payrollMatrixUrl =
                     $"api/leave/payroll-matrix?year={SelectedYear}&month={SelectedMonth}" +
                     (string.IsNullOrEmpty(SelectedCompanyId) ? "" : $"&companyId={SelectedCompanyId}") +
@@ -412,6 +429,32 @@
             SelectedEmployeeId = null;
         }
     }
+
+    private string GetPayrollTimeExportUrl()
+    {
+        var companyPart = string.IsNullOrEmpty(SelectedCompanyId) ? "" : $"&companyId={SelectedCompanyId}";
+        var deptPart = string.IsNullOrEmpty(SelectedDepartmentId) ? "" : $"&departmentId={SelectedDepartmentId}";
+        var empPart = string.IsNullOrEmpty(SelectedEmployeeId) ? "" : $"&employeeId={SelectedEmployeeId}";
+
+        return
+            $"api/report/payroll-time/export" +
+            $"?startDate={PayrollStart:yyyy-MM-dd}" +
+            $"&endDate={PayrollEnd:yyyy-MM-dd}" +
+            companyPart + deptPart + empPart;
+    }
+
+    private string GetPayrollLeaveExportUrl()
+    {
+        var companyPart = string.IsNullOrEmpty(SelectedCompanyId) ? "" : $"&companyId={SelectedCompanyId}";
+        var deptPart = string.IsNullOrEmpty(SelectedDepartmentId) ? "" : $"&departmentId={SelectedDepartmentId}";
+        var empPart = string.IsNullOrEmpty(SelectedEmployeeId) ? "" : $"&employeeId={SelectedEmployeeId}";
+
+        return
+            $"api/leave/payroll-matrix/export" +   // changed line
+            $"?year={SelectedYear}&month={SelectedMonth}" +
+            companyPart + deptPart + empPart;
+    }
+
 
     private string GetLeaveAccrualExplanation()
     {

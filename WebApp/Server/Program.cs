@@ -76,6 +76,7 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<LeaveDebugService>();
 builder.Services.AddScoped<CompanyService>();
 
+
 builder.Services.Configure<LeaveAttachmentsOptions>(
     builder.Configuration.GetSection("LeaveAttachments"));
 

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using WebApp.Server.Data;
 using WebApp.Server.Services.Attendance;
 using WebApp.Shared.Model;
+using WebApp.Shared.Model.Payroll;
 
 public class ReportService
 {
@@ -19,11 +20,11 @@ public class ReportService
     }
 
     public async Task<List<PayrollTimeSummaryDto>> GetPayrollTimeSummaryAsync(
-     DateTime startDateInclusive,
-     DateTime endDateExclusive,
-     int? companyId,
-     int? departmentId,
-     int? employeeId)
+        DateTime startDateInclusive,
+        DateTime endDateExclusive,
+        int? companyId,
+        int? departmentId,
+        int? employeeId)
     {
         var attendance = await _attendanceService.GetByDateRangeAsync(
             fromLocalInclusive: startDateInclusive,
@@ -84,10 +85,6 @@ public class ReportService
 
         return grouped;
     }
-
-
-
-
 
     /// <summary>
     /// Per-employee overtime summary for the given date range.
@@ -247,6 +244,107 @@ public class ReportService
                 .ToList();
 
         return summaries;
+    }
+
+    /// <summary>
+    /// Payroll leave matrix: one row per employee with balances per leave type
+    /// as at end of previous month for the selected payroll month (year, month).
+    /// Reuses GetLeaveSummaryAsync + LeaveBalances.
+    /// </summary>
+    public async Task<List<PayrollLeaveRowDto>> GetPayrollLeaveMatrixAsync(
+        int year,
+        int month,
+        int? companyId,
+        int? departmentId,
+        int? employeeId)
+    {
+        // Previous calendar month range
+        var selected = new DateTime(year, month, 1);
+        var prev = selected.AddMonths(-1);
+        var prevStart = new DateTime(prev.Year, prev.Month, 1);
+        var prevEnd = prevStart.AddMonths(1).AddDays(-1);
+
+        // Start from LeaveSummary (per employee, per type)
+        var leaveSummaries = await GetLeaveSummaryAsync(prevStart, prevEnd, employeeId);
+
+        if (!leaveSummaries.Any())
+            return new List<PayrollLeaveRowDto>();
+
+        // Apply company / department filters via Employees table
+        if (companyId.HasValue || departmentId.HasValue)
+        {
+            var ids = leaveSummaries.Select(s => s.EmployeeId).Distinct().ToList();
+
+            var employeesQuery = _context.Employees.AsQueryable();
+
+            if (companyId.HasValue && companyId.Value > 0)
+                employeesQuery = employeesQuery.Where(e => e.CompanyId == companyId.Value);
+
+            if (departmentId.HasValue && departmentId.Value > 0)
+                employeesQuery = employeesQuery.Where(e => e.DepartmentId == departmentId.Value);
+
+            var allowedIds = await employeesQuery
+                .Where(e => ids.Contains(e.Id))
+                .Select(e => e.Id)
+                .ToListAsync();
+
+            leaveSummaries = leaveSummaries
+                .Where(s => allowedIds.Contains(s.EmployeeId))
+                .ToList();
+        }
+
+        var result = new List<PayrollLeaveRowDto>();
+
+        foreach (var s in leaveSummaries)
+        {
+            decimal annual = 0,
+                    paternity = 0,
+                    maternity = 0,
+                    sick = 0,
+                    unpaid = 0,
+                    familyResp = 0;
+
+            foreach (var t in s.LeaveTypes)
+            {
+                switch (t.LeaveTypeName)
+                {
+                    case "Annual Leave":
+                        annual = t.Remaining;
+                        break;
+                    case "Paternity Leave":
+                        paternity = t.Remaining;
+                        break;
+                    case "Maternity Leave":
+                        maternity = t.Remaining;
+                        break;
+                    case "Sick Leave":
+                        sick = t.Remaining;
+                        break;
+                    case "Unpaid Leave":
+                        unpaid = t.Remaining;
+                        break;
+                    case "Family Responsibility":
+                        familyResp = t.Remaining;
+                        break;
+                }
+            }
+
+            result.Add(new PayrollLeaveRowDto
+            {
+                EmployeeId = s.EmployeeId,
+                EmployeeName = s.EmployeeName,
+                AnnualLeave = annual,
+                PaternityLeave = paternity,
+                MaternityLeave = maternity,
+                SickLeave = sick,
+                UnpaidLeave = unpaid,
+                FamilyResponsibility = familyResp
+            });
+        }
+
+        return result
+            .OrderBy(r => r.EmployeeName)
+            .ToList();
     }
 
     public async Task<List<SaturdayWorkSummary>> GetSaturdayWorkReportAsync(
