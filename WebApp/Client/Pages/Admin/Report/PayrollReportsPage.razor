@@ -118,150 +118,43 @@
         <div class="tab-content border border-top-0 p-3">
             @if (activeTab == "time")
             {
-                @if ((WeeklySummaries is null && TimeSummaries is null) && (OvertimeItems is null))
+                @if (PayrollTimeSummaries is null || !PayrollTimeSummaries.Any())
                 {
-                    <p>No data loaded.</p>
+                    <p>No time data for selected period.</p>
                 }
                 else
                 {
-                    <h5>Weekly breakdown</h5>
+                    <h5>Monthly totals (16th–15th)</h5>
 
-                    @if (WeeklySummaries is null || !WeeklySummaries.Any())
-                    {
-                        <p>No weekly records for selected period.</p>
-                    }
-                    else
-                    {
-                        var employeesWeekly = WeeklySummaries
-                        .GroupBy(w => new { w.EmployeeId, w.Name })
-                        .ToList();
-
-                        <div class="table-responsive mb-3">
-                            <table class="table table-sm table-striped table-bordered align-middle">
-                                <thead class="table-light">
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-striped table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Employee</th>
+                                    <th class="text-end">Normal Hours</th>
+                                    <th class="text-end">OT Weekday Approved</th>
+                                    <th class="text-end">OT Sunday/Public Approved</th>
+                                    <th class="text-end">Driver Approved</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in PayrollTimeSummaries)
+                                {
                                     <tr>
-                                        <th>Employee</th>
-                                        @foreach (var w in MonthWeeks)
-                                        {
-                                            <th class="text-center">
-                                                Week @w.Index<br />
-                                                <small>@w.Start.ToString("dd")–@w.End.ToString("dd")</small>
-                                            </th>
-                                        }
+                                        <td>@row.EmployeeName</td>
+                                        <td class="text-end">@row.NormalHours.ToString("0.00")</td>
+                                        <td class="text-end">@row.OvertimeWeekdayApproved.ToString("0.00")</td>
+                                        <td class="text-end">@row.OvertimeSundayApproved.ToString("0.00")</td>
+                                        <td class="text-end">@row.DriverApproved.ToString("0.00")</td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var emp in employeesWeekly)
-                                    {
-                                        <tr>
-                                            <td>@emp.Key.Name</td>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
 
-                                            @foreach (var w in MonthWeeks)
-                                            {
-                                                var week = emp.FirstOrDefault(x => x.WeekIndex == w.Index);
-
-                                                if (week is null)
-                                                {
-                                                    <td class="text-end text-muted">0 / 0 / 0 / 0</td>
-                                                }
-                                                else
-                                                {
-                                                    <td class="text-end">
-                                                        @week.NormalHours.ToString("0.00") /
-                                                        @week.OvertimeApproved.ToString("0.00") /
-                                                        @week.OvertimeSundayApproved.ToString("0.00") /
-                                                        @week.DriverApproved.ToString("0.00")
-                                                    </td>
-                                                }
-                                            }
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <p class="text-muted">
-                            Format per week column: Normal / OT Approved / OT Sunday / Driver.
-                        </p>
-                    }
-
-                    <h5>Monthly totals</h5>
-
-                    @if (TimeSummaries is null || !TimeSummaries.Any())
-                    {
-                        <p>No monthly summary records for selected period.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive mb-3">
-                            <table class="table table-sm table-striped table-bordered align-middle">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Employee</th>
-                                        <th class="text-end">Normal Hours</th>
-                                        <th class="text-end">OT Approved</th>
-                                        <th class="text-end">OT Sunday Approved</th>
-                                        <th class="text-end">Driver Approved</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var row in TimeSummaries)
-                                    {
-                                        <tr>
-                                            <td>@row.EmployeeName</td>
-                                            <td class="text-end">@row.NormalHours.ToString("0.00")</td>
-                                            <td class="text-end">@row.OvertimeApproved.ToString("0.00")</td>
-                                            <td class="text-end">@row.OvertimeSundayApproved.ToString("0.00")</td>
-                                            <td class="text-end">@row.DriverApproved.ToString("0.00")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-
-                    <h5>Overtime detail</h5>
-
-                    @if (OvertimeItems is null)
-                    {
-                        <p>No overtime data loaded.</p>
-                    }
-                    else if (!OvertimeItems.Any())
-                    {
-                        <p>No overtime records for selected period.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-sm table-striped table-bordered align-middle">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Employee</th>
-                                        <th>Department</th>
-                                        <th class="text-end">Hours</th>
-                                        <th>Type</th>
-                                        <th>Approved</th>
-                                        <th>Notes</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var ot in OvertimeItems)
-                                    {
-                                        <tr>
-                                            <td>@ot.Date.ToString("yyyy-MM-dd")</td>
-                                            <td>@ot.EmployeeName</td>
-                                            <td>@ot.DepartmentName</td>
-                                            <td class="text-end">@ot.Hours.ToString("0.00")</td>
-                                            <td>@ot.Type</td>
-                                            <td>@(ot.IsApproved ? "Yes" : "No")</td>
-                                            <td>@ot.Notes</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
+                    <p class="text-muted">
+                        Same categories as Attendance page: Normal, approved weekday overtime, approved Sunday/public overtime, and approved driver hours.
+                    </p>
                 }
             }
             else if (activeTab == "leavePayroll")
@@ -340,17 +233,12 @@
     private List<SimpleEmployeeDto> AllEmployees = new();
     private List<SimpleEmployeeDto> Employees = new();
 
-    private List<PayrollHoursRowDto>? TimeSummaries;
-    private List<PayrollWeeklySummaryDto>? WeeklySummaries = new();
-    private List<PayrollOvertimeItemDto>? OvertimeItems = new();
-
+    private List<PayrollTimeSummaryDto>? PayrollTimeSummaries;
     private List<PayrollLeaveRowDto>? PayrollLeaveMatrix;
 
-    // Full calendar month (used only for previous-month leave calculations)
     private DateTime MonthStart => new DateTime(SelectedYear, SelectedMonth, 1);
     private DateTime MonthEnd => MonthStart.AddMonths(1).AddDays(-1);
 
-    // Leave (Payroll) balances use previous month
     private DateTime PrevMonthStart
     {
         get
@@ -362,30 +250,25 @@
     }
     private DateTime PrevMonthEnd => PrevMonthStart.AddMonths(1).AddDays(-1);
 
-    // Time & overtime payroll period: 15th of selected month to 16th of next month (exclusive)
+    // NEW: When user selects month M, use 16th of previous month -> 16th of selected month
     private DateTime PayrollStart
     {
         get
         {
-            return new DateTime(SelectedYear, SelectedMonth, 15);
+            var selected = new DateTime(SelectedYear, SelectedMonth, 1);
+            var prev = selected.AddMonths(-1);         // previous calendar month
+            return new DateTime(prev.Year, prev.Month, 16); // 16th of previous month
         }
     }
 
+    // Exclusive end bound: 16th of selected month
     private DateTime PayrollEnd
-    {
-        get
-        {
-            var start = PayrollStart;
-            return start.AddMonths(1).AddDays(1); // exclusive upper bound (16th of next month)
-        }
-    }
+        => new DateTime(SelectedYear, SelectedMonth, 16);
 
-    private List<WeekRange> MonthWeeks = new();
 
     protected override async Task OnInitializedAsync()
     {
         BuildMonths();
-        BuildMonthWeeks();
         await LoadLookups();
         await LoadPayrollData();
     }
@@ -394,7 +277,6 @@
 
     private async Task OnReloadClicked()
     {
-        BuildMonthWeeks();
         await LoadPayrollData();
     }
 
@@ -407,34 +289,6 @@
                 Text = CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)
             })
             .ToList();
-    }
-
-    // Weekly ranges based on PayrollStart/PayrollEnd
-    private void BuildMonthWeeks()
-    {
-        MonthWeeks.Clear();
-
-        var start = PayrollStart;
-        var end = PayrollEnd.AddDays(-1); // inclusive last day in the range
-
-        var currentStart = start;
-        var currentEnd = currentStart;
-
-        while (currentEnd.DayOfWeek != DayOfWeek.Sunday && currentEnd < end)
-            currentEnd = currentEnd.AddDays(1);
-
-        int index = 1;
-        MonthWeeks.Add(new WeekRange { Index = index, Start = currentStart, End = currentEnd });
-
-        while (currentEnd < end)
-        {
-            index++;
-            currentStart = currentEnd.AddDays(1);
-            currentEnd = currentStart.AddDays(6);
-            if (currentEnd > end) currentEnd = end;
-
-            MonthWeeks.Add(new WeekRange { Index = index, Start = currentStart, End = currentEnd });
-        }
     }
 
     private async Task LoadLookups()
@@ -486,41 +340,24 @@
 
             try
             {
+                var companyPart = string.IsNullOrEmpty(SelectedCompanyId) ? "" : $"&companyId={SelectedCompanyId}";
+                var deptPart = string.IsNullOrEmpty(SelectedDepartmentId) ? "" : $"&departmentId={SelectedDepartmentId}";
+                var empPart = string.IsNullOrEmpty(SelectedEmployeeId) ? "" : $"&employeeId={SelectedEmployeeId}";
+
                 var payrollUrl =
-                    $"api/attendance/payroll-hours" +
-                    $"?from={timeFrom:yyyy-MM-dd}" +
-                    $"&to={timeTo:yyyy-MM-dd}" +
-                    (string.IsNullOrEmpty(SelectedCompanyId) ? "" : $"&companyId={SelectedCompanyId}") +
-                    (string.IsNullOrEmpty(SelectedEmployeeId) ? "" : $"&employeeId={SelectedEmployeeId}") +
-                    (string.IsNullOrEmpty(SelectedDepartmentId) ? "" : $"&departmentId={SelectedDepartmentId}");
+                    $"api/report/payroll-time" +
+                    $"?startDate={timeFrom:yyyy-MM-dd}" +
+                    $"&endDate={timeTo:yyyy-MM-dd}" +
+                    companyPart + deptPart + empPart;
 
-                TimeSummaries = await Http.GetFromJsonAsync<List<PayrollHoursRowDto>>(payrollUrl)
-                                ?? new List<PayrollHoursRowDto>();
+                PayrollTimeSummaries =
+                    await Http.GetFromJsonAsync<List<PayrollTimeSummaryDto>>(payrollUrl)
+                    ?? new List<PayrollTimeSummaryDto>();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR TimeSummaries: {ex.Message}");
-                TimeSummaries = new List<PayrollHoursRowDto>();
-            }
-
-            try
-            {
-                var overtimeUrl =
-                    $"api/attendance/overtime-detail" +
-                    $"?from={timeFrom:yyyy-MM-dd}" +
-                    $"&to={timeTo:yyyy-MM-dd}" +
-                    (string.IsNullOrEmpty(SelectedCompanyId) ? "" : $"&companyId={SelectedCompanyId}") +
-                    (string.IsNullOrEmpty(SelectedEmployeeId) ? "" : $"&employeeId={SelectedEmployeeId}") +
-                    (string.IsNullOrEmpty(SelectedDepartmentId) ? "" : $"&departmentId={SelectedDepartmentId}");
-
-                OvertimeItems =
-                    await Http.GetFromJsonAsync<List<PayrollOvertimeItemDto>>(overtimeUrl)
-                    ?? new List<PayrollOvertimeItemDto>();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ERROR OvertimeItems: {ex.Message}");
-                OvertimeItems = new List<PayrollOvertimeItemDto>();
+                Console.WriteLine($"ERROR PayrollTimeSummaries: {ex.Message}");
+                PayrollTimeSummaries = new List<PayrollTimeSummaryDto>();
             }
 
             try
@@ -614,49 +451,12 @@
         public int DepartmentId { get; set; }
     }
 
-    public class WeekRange
+    public class PayrollTimeSummaryDto
     {
-        public int Index { get; set; }
-        public DateTime Start { get; set; }
-        public DateTime End { get; set; }
-    }
-
-    public class PayrollWeeklySummaryDto
-    {
-        public string EmployeeId { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-
-        public int WeekIndex { get; set; }
-        public DateTime WeekStart { get; set; }
-        public DateTime WeekEnd { get; set; }
-
-        public decimal NormalHours { get; set; }
-        public decimal OvertimeApproved { get; set; }
-        public decimal OvertimeSundayApproved { get; set; }
-        public decimal DriverApproved { get; set; }
-    }
-
-    public class PayrollOvertimeItemDto
-    {
-        public DateTime Date { get; set; }
-        public string EmployeeId { get; set; } = string.Empty;
         public string EmployeeName { get; set; } = string.Empty;
-        public string DepartmentName { get; set; } = string.Empty;
-        public decimal Hours { get; set; }
-        public string Type { get; set; } = string.Empty;
-        public bool IsApproved { get; set; }
-        public string? Notes { get; set; }
-    }
-
-    public class PayrollLeaveItemDto
-    {
-        public string EmployeeId { get; set; } = string.Empty;
-        public string EmployeeName { get; set; } = string.Empty;
-        public string DepartmentName { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty;
-        public DateTime FromDate { get; set; }
-        public DateTime ToDate { get; set; }
-        public decimal Hours { get; set; }
-        public string? Notes { get; set; }
+        public double NormalHours { get; set; }
+        public double OvertimeWeekdayApproved { get; set; }
+        public double OvertimeSundayApproved { get; set; }
+        public double DriverApproved { get; set; }
     }
 }

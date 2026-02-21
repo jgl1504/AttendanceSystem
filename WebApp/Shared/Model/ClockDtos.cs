@@ -46,6 +46,9 @@
         public double? DriverHours { get; set; }
         public double? BreakdownHours { get; set; }
 
+        // New: approved driver hours (separate from OT)
+        public double? ApprovedDriverHours { get; set; }
+
         // New: category of this record if you show segments in a flat list
         public WorkCategory WorkCategory { get; set; } = WorkCategory.Normal;
 
@@ -64,6 +67,7 @@
         public bool IsOvertimeApproved => OvertimeStatus == OvertimeStatus.Approved;
         public bool IsOvertimePending => OvertimeStatus == OvertimeStatus.Pending;
     }
+
 
 
     public class AttendanceEditDto

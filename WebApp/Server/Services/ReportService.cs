@@ -4,16 +4,90 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using WebApp.Server.Data;
+using WebApp.Server.Services.Attendance;
 using WebApp.Shared.Model;
 
 public class ReportService
 {
     private readonly DataContext _context;
+    private readonly AttendanceService _attendanceService;
 
-    public ReportService(DataContext context)
+    public ReportService(DataContext context, AttendanceService attendanceService)
     {
         _context = context;
+        _attendanceService = attendanceService;
     }
+
+    public async Task<List<PayrollTimeSummaryDto>> GetPayrollTimeSummaryAsync(
+     DateTime startDateInclusive,
+     DateTime endDateExclusive,
+     int? companyId,
+     int? departmentId,
+     int? employeeId)
+    {
+        var attendance = await _attendanceService.GetByDateRangeAsync(
+            fromLocalInclusive: startDateInclusive,
+            toLocalExclusive: endDateExclusive,
+            employeeId: employeeId,
+            departmentId: departmentId,
+            companyId: companyId);
+
+        // 1) Collapse to one row per employee per day
+        var dailyPerEmployee = attendance
+            .GroupBy(a => new
+            {
+                a.EmployeeName,
+                Day = a.ClockInTime.ToLocalTime().Date
+            })
+            .Select(g => new
+            {
+                g.Key.EmployeeName,
+                g.Key.Day,
+
+                // Daily normal hours = sum of NormalHours across that day
+                Normal = g.Sum(x => x.NormalHours ?? 0),
+
+                // Daily OT buckets and status are identical for all rows that day,
+                // because GetByDateRangeAsync already sets them per day.
+                WeekdayOT = g.First().WeekdayOvertimeHours ?? 0,
+                SundayOT = g.First().SundayPublicOvertimeHours ?? 0,
+                Status = g.First().OvertimeStatus,
+
+                // Daily approved driver hours = sum of ApprovedDriverHours
+                DriverApproved = g.Sum(x => x.ApprovedDriverHours ?? 0)
+            })
+            .ToList();
+
+        // 2) Now aggregate per employee over the whole payroll period, using only Approved where required
+        var grouped = dailyPerEmployee
+            .GroupBy(x => x.EmployeeName)
+            .Select(g => new PayrollTimeSummaryDto
+            {
+                EmployeeName = g.Key,
+                StartDate = startDateInclusive.Date,
+                EndDate = endDateExclusive.Date,
+
+                NormalHours = g.Sum(x => x.Normal),
+
+                OvertimeWeekdayApproved = g
+                    .Where(x => x.Status == OvertimeStatus.Approved)
+                    .Sum(x => x.WeekdayOT),
+
+                OvertimeSundayApproved = g
+                    .Where(x => x.Status == OvertimeStatus.Approved)
+                    .Sum(x => x.SundayOT),
+
+                DriverApproved = g.Sum(x => x.DriverApproved)
+            })
+            .OrderBy(r => r.EmployeeName)
+            .ToList();
+
+        return grouped;
+    }
+
+
+
+
 
     /// <summary>
     /// Per-employee overtime summary for the given date range.
@@ -27,7 +101,6 @@ public class ReportService
         startDate = startDate.Date;
         endDate = endDate.Date;
 
-        // Base query for records in range
         var recordsQuery =
             from a in _context.AttendanceRecords
             let workDate = a.ClockInTime.Date
@@ -47,7 +120,6 @@ public class ReportService
                 StartDate = startDate,
                 EndDate = endDate,
 
-                // Total normal hours = HoursWorked - overtime parts (null safe)
                 NormalHours =
                     g.Sum(x => x.HoursWorked ?? 0)
                     - g.Sum(x => x.WeekdayOvertimeHours ?? 0)
@@ -87,11 +159,9 @@ public class ReportService
         startDate = startDate.Date;
         endDate = endDate.Date;
 
-        // 1) Approved leave records that overlap the period
         var takenBaseQuery =
-            from r in _context.LeaveRecords   // EF entity matching LeaveRecordDto
+            from r in _context.LeaveRecords
             where r.Status == LeaveStatus.Approved
-                  // any overlap with the selected period
                   && r.StartDate.Date <= endDate
                   && r.EndDate.Date >= startDate
             select r;
@@ -125,7 +195,6 @@ public class ReportService
             return new List<LeaveSummary>();
         }
 
-        // 2) Fetch balances for the employees + leave types in the result
         var employeeIds = taken.Select(x => x.EmployeeId).Distinct().ToList();
         var typeIds = taken.Select(x => x.LeaveTypeId).Distinct().ToList();
 
@@ -137,14 +206,12 @@ public class ReportService
             {
                 b.EmployeeId,
                 b.LeaveTypeId,
-                // You can decide whether TotalEntitlement is OpeningBalance or CurrentBalance
                 TotalEntitlement = b.OpeningBalance,
                 Remaining = b.CurrentBalance
             };
 
         var balances = await balancesQuery.ToListAsync();
 
-        // 3) Build per-employee LeaveSummary with a list of LeaveBalanceSummaryDto rows
         var summaries =
             taken
                 .GroupBy(x => new { x.EmployeeId, x.EmployeeName })
@@ -190,7 +257,6 @@ public class ReportService
         startDate = startDate.Date;
         endDate = endDate.Date;
 
-        // Employees (with departments) – EF query
         var employeesQuery = _context.Employees
             .Include(e => e.Department)
             .Where(e => e.IsActive);
@@ -200,11 +266,9 @@ public class ReportService
 
         var employees = await employeesQuery.ToListAsync();
 
-        // Time range in UTC for SQL query
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Local).ToUniversalTime();
         var endUtc = DateTime.SpecifyKind(endDate.AddDays(1), DateTimeKind.Local).ToUniversalTime();
 
-        // Attendance in range – EF query
         var attendanceAllQuery = _context.AttendanceRecords
             .Include(a => a.Employee)
                 .ThenInclude(e => e.Department)
@@ -215,7 +279,6 @@ public class ReportService
 
         var attendanceAll = await attendanceAllQuery.ToListAsync();
 
-        // Now in memory: keep only Saturdays
         var saturdayAttendance = attendanceAll
             .Where(a => a.ClockInTime.ToLocalTime().DayOfWeek == DayOfWeek.Saturday)
             .ToList();
@@ -228,7 +291,6 @@ public class ReportService
             if (dept == null)
                 continue;
 
-            // 1) Count Saturdays in range the employee is expected to work
             var expected = 0;
             if (dept.WorksSaturday)
             {
@@ -239,7 +301,6 @@ public class ReportService
                 }
             }
 
-            // 2) Saturdays actually worked
             var worked = saturdayAttendance
                 .Where(a => a.EmployeeId == emp.Id)
                 .Select(a => a.ClockInTime.ToLocalTime().Date)
@@ -261,4 +322,17 @@ public class ReportService
 
         return summaries;
     }
+}
+
+// DTO used by new payroll endpoint
+public class PayrollTimeSummaryDto
+{
+    public string EmployeeName { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+
+    public double NormalHours { get; set; }
+    public double OvertimeWeekdayApproved { get; set; }
+    public double OvertimeSundayApproved { get; set; }
+    public double DriverApproved { get; set; }
 }

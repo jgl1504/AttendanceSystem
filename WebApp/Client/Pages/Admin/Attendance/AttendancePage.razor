@@ -86,6 +86,7 @@ else
                     <th>Expected</th>
                     <th>Weekday OT</th>
                     <th>Sun/Holiday OT</th>
+                    <th>Approved Driver</th>
                     <th>OT Status</th>
                     <th>OT Note</th>
                     <th>Approved By</th>
@@ -112,11 +113,42 @@ else
                         <td>@r.ClockInTime.ToLocalTime().ToString("HH:mm")</td>
                         <td>@(r.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "-")</td>
 
-                        <!-- CHANGED: use HH:mm formatter for all totals -->
+                        <!-- Hours totals formatted as HH:mm -->
                         <td>@FormatHours(r.HoursWorked)</td>
                         <td>@FormatHours(r.ExpectedHours)</td>
-                        <td>@FormatHours(r.WeekdayOvertimeHours)</td>
-                        <td>@FormatHours(r.SundayPublicOvertimeHours)</td>
+                        <td>
+                            @if (r.WorkCategory == WorkCategory.Driver)
+                            {
+                                <span>-</span>
+                            }
+                            else
+                            {
+                                @FormatHours(r.WeekdayOvertimeHours)
+                            }
+                        </td>
+                        <td>
+                            @if (r.WorkCategory == WorkCategory.Driver)
+                            {
+                                <span>-</span>
+                            }
+                            else
+                            {
+                                @FormatHours(r.SundayPublicOvertimeHours)
+                            }
+                        </td>
+
+
+                        <!-- NEW: Approved Driver hours (separate, not part of OT pools) -->
+                        <td>
+                            @if (r.ApprovedDriverHours.HasValue)
+                            {
+                                @FormatHours(r.ApprovedDriverHours)
+                            }
+                            else
+                            {
+                                <span>-</span>
+                            }
+                        </td>
 
                         <td>
                             @if (r.OvertimeHours.HasValue && r.OvertimeHours.Value > 0)
@@ -282,7 +314,6 @@ else
 @code {
     private List<AttendanceListItemDto>? records;
 
-    // grouped view
     private List<AttendanceDayGroup>? groupedRecords;
 
     private class AttendanceDayGroup
@@ -291,7 +322,6 @@ else
         public List<AttendanceListItemDto> Records { get; set; } = new();
     }
 
-    // Reuse EmployeeDto from employees page
     private List<EmployeeDto> employees = new();
     private List<EmployeeDto> filteredEmployees = new();
     private List<EmployeeDto> approvers = new();
@@ -686,7 +716,7 @@ else
         await LoadRecords();
     }
 
-    // NEW: format decimal hours as HH:mm
+    // format decimal hours as HH:mm
     private static string FormatHours(double? hours)
     {
         if (!hours.HasValue)

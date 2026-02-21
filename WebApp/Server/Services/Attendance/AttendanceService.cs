@@ -210,8 +210,13 @@ public class AttendanceService
                         expectedHours = (double)weekdayExpectedPerDay;
                     }
 
-                    var totalHoursForDay = g.Sum(x => x.HoursWorked ?? 0);
-                    var rawOvertime = Math.Max(0, totalHoursForDay - expectedHours);
+                    // Only Normal + Breakdown count toward overtime; Driver is excluded
+                    var totalOvertimeBaseHoursForDay = g
+                        .Where(x => x.WorkCategory == WorkCategory.Normal
+                                 || x.WorkCategory == WorkCategory.Breakdown)
+                        .Sum(x => x.HoursWorked ?? 0);
+
+                    var rawOvertime = Math.Max(0, totalOvertimeBaseHoursForDay - expectedHours);
 
                     var anyApproved = g.Any(x => x.OvertimeStatus == OvertimeStatus.Approved);
                     var anyDenied = g.Any(x => x.OvertimeStatus == OvertimeStatus.Denied);
@@ -247,7 +252,7 @@ public class AttendanceService
                     return new
                     {
                         ExpectedHours = Math.Round(expectedHours, 2),
-                        TotalHours = Math.Round(totalHoursForDay, 2),
+                        TotalHours = Math.Round(totalOvertimeBaseHoursForDay, 2),
                         OvertimeHours = Math.Round(rawOvertime, 2),
                         WeekdayOvertime = Math.Round(weekdayOt, 2),
                         SundayHolidayOvertime = Math.Round(sundayHolidayOt, 2),
@@ -269,11 +274,16 @@ public class AttendanceService
             double? normalHours = null;
             double? driverHours = null;
             double? breakdownHours = null;
+            double? approvedDriverHours = null;
 
             if (a.WorkCategory == WorkCategory.Normal)
                 normalHours = a.HoursWorked;
             else if (a.WorkCategory == WorkCategory.Driver)
+            {
                 driverHours = a.HoursWorked;
+                if (a.OvertimeStatus == OvertimeStatus.Approved)
+                    approvedDriverHours = a.HoursWorked;
+            }
             else if (a.WorkCategory == WorkCategory.Breakdown)
                 breakdownHours = a.HoursWorked;
 
@@ -300,6 +310,7 @@ public class AttendanceService
                 NormalHours = normalHours,
                 DriverHours = driverHours,
                 BreakdownHours = breakdownHours,
+                ApprovedDriverHours = approvedDriverHours,
 
                 SiteId = a.SiteId,
                 SiteName = a.Site?.Name,
@@ -430,22 +441,22 @@ public class AttendanceService
                 {
                     if (dept.WorksSunday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
                     }
                 }
                 else if (isSaturday)
                 {
                     if (dept.WorksSaturday)
                     {
-                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
-                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
+                        defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
+                        defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
                     }
                 }
                 else
                 {
-                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\\:mm");
-                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\\:mm");
+                    defaultClockIn = dept.DailyStartTime.ToString(@"hh\:mm");
+                    defaultClockOut = dept.DailyEndTime.ToString(@"hh\:mm");
                 }
             }
 
@@ -560,7 +571,7 @@ public class AttendanceService
         DateTime toLocalExclusive,
         int? employeeId,
         int? departmentId,
-        int? companyId)   // <-- NEW
+        int? companyId)
     {
         var startUtc = DateTime.SpecifyKind(fromLocalInclusive.Date, DateTimeKind.Local).ToUniversalTime();
         var endUtc = DateTime.SpecifyKind(toLocalExclusive.Date, DateTimeKind.Local).ToUniversalTime();
@@ -568,8 +579,8 @@ public class AttendanceService
         var query = _context.AttendanceRecords
             .Include(a => a.Employee)
                 .ThenInclude(e => e.Department)
-            .Include(a => a.Employee)              // ensure Employee is included once
-                .ThenInclude(e => e.Company)       // <-- ensure Company is loaded
+            .Include(a => a.Employee)
+                .ThenInclude(e => e.Company)
             .Include(a => a.OvertimeApprovedByEmployee)
             .Include(a => a.Site)
             .Where(a => a.ClockInTime >= startUtc && a.ClockInTime < endUtc);
@@ -586,13 +597,14 @@ public class AttendanceService
 
         if (companyId.HasValue && companyId.Value > 0)
         {
-            query = query.Where(a => a.Employee.CompanyId == companyId.Value);   // <-- filter by company
+            query = query.Where(a => a.Employee.CompanyId == companyId.Value);
         }
 
         var records = await query
             .OrderBy(a => a.ClockInTime)
             .ToListAsync();
 
+        // Calculate HoursWorked for each record
         foreach (var a in records)
         {
             double? hoursWorked = null;
@@ -604,6 +616,7 @@ public class AttendanceService
             a.HoursWorked = hoursWorked;
         }
 
+        // Per-employee-per-day daily info (expected hours, OT split, status)
         var dailyGroups = records
             .GroupBy(a => new { a.EmployeeId, Day = a.ClockInTime.ToLocalTime().Date })
             .ToDictionary(
@@ -620,7 +633,7 @@ public class AttendanceService
 
                     bool isSunday = dayOfWeek == DayOfWeek.Sunday;
                     bool isSaturday = dayOfWeek == DayOfWeek.Saturday;
-                    bool isPublicHoliday = false;
+                    bool isPublicHoliday = false; // plug your holiday logic here if needed
 
                     double expectedHours;
 
@@ -643,8 +656,13 @@ public class AttendanceService
                         expectedHours = (double)weekdayExpectedPerDay;
                     }
 
-                    var totalHoursForDay = g.Sum(x => x.HoursWorked ?? 0);
-                    var rawOvertime = Math.Max(0, totalHoursForDay - expectedHours);
+                    // Only Normal + Breakdown count toward overtime; Driver is excluded
+                    var totalOvertimeBaseHoursForDay = g
+                        .Where(x => x.WorkCategory == WorkCategory.Normal
+                                 || x.WorkCategory == WorkCategory.Breakdown)
+                        .Sum(x => x.HoursWorked ?? 0);
+
+                    var rawOvertime = Math.Max(0, totalOvertimeBaseHoursForDay - expectedHours);
 
                     var anyApproved = g.Any(x => x.OvertimeStatus == OvertimeStatus.Approved);
                     var anyDenied = g.Any(x => x.OvertimeStatus == OvertimeStatus.Denied);
@@ -680,7 +698,7 @@ public class AttendanceService
                     return new
                     {
                         ExpectedHours = Math.Round(expectedHours, 2),
-                        TotalHours = Math.Round(totalHoursForDay, 2),
+                        TotalHours = Math.Round(totalOvertimeBaseHoursForDay, 2),
                         OvertimeHours = Math.Round(rawOvertime, 2),
                         WeekdayOvertime = Math.Round(weekdayOt, 2),
                         SundayHolidayOvertime = Math.Round(sundayHolidayOt, 2),
@@ -703,13 +721,24 @@ public class AttendanceService
             double? normalHours = null;
             double? driverHours = null;
             double? breakdownHours = null;
+            double? approvedDriverHours = null;
 
             if (a.WorkCategory == WorkCategory.Normal)
+            {
                 normalHours = a.HoursWorked;
+            }
             else if (a.WorkCategory == WorkCategory.Driver)
+            {
                 driverHours = a.HoursWorked;
+
+                // Only count driver hours as "approved driver" when the day's status is Approved
+                if (a.OvertimeStatus == OvertimeStatus.Approved)
+                    approvedDriverHours = a.HoursWorked;
+            }
             else if (a.WorkCategory == WorkCategory.Breakdown)
+            {
                 breakdownHours = a.HoursWorked;
+            }
 
             list.Add(new AttendanceListItemDto
             {
@@ -734,6 +763,7 @@ public class AttendanceService
                 NormalHours = normalHours,
                 DriverHours = driverHours,
                 BreakdownHours = breakdownHours,
+                ApprovedDriverHours = approvedDriverHours,
 
                 SiteId = a.SiteId,
                 SiteName = a.Site?.Name,
@@ -750,6 +780,7 @@ public class AttendanceService
         await _context.SaveChangesAsync();
         return list;
     }
+
 
     public async Task<AttendanceRecord?> GetRecordForDecisionAsync(int id)
         => await _context.AttendanceRecords.FindAsync(id);
