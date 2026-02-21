@@ -192,14 +192,12 @@ namespace WebApp.Server.Services.Leave
             return result;
         }
 
-        // ==== INTERNAL HELPERS ===============================================
-
         private async Task<LeaveBalanceSummaryDto> GetSickLeaveSummaryAsync(
-            int employeeId,
-            LeaveType leaveType,
-            DateTime asAtDate)
+      int employeeId,
+      LeaveType leaveType,
+      DateTime asAtDate)
         {
-            const decimal sickEntitlementPerCycle = 30m; // 30 days every 3 years[web:51][web:58]
+            const decimal sickEntitlementPerCycle = 30m; // default 30 days every 3 years
             var cycleLengthYears = 3;
 
             var employee = await _context.Employees
@@ -216,14 +214,23 @@ namespace WebApp.Server.Services.Leave
                 };
             }
 
+            // Try get opening balance row for sick leave
+            var balanceRow = await _context.LeaveBalances
+                .FirstOrDefaultAsync(b => b.EmployeeId == employeeId && b.LeaveTypeId == leaveType.Id);
+
+            // Determine cycle start and entitlement based on hire date vs cut-off
             DateTime cycleStart;
+            decimal totalEntitlement;
 
             if (employee.HireDate.Date < LeaveConstants.AccrualHireDateCutOff.Date)
             {
+                // Pre cut-off: use opening balance if available, otherwise fallback to default 30
                 cycleStart = LeaveConstants.AccrualHireDateCutOff.Date;
+                totalEntitlement = balanceRow?.OpeningBalance ?? sickEntitlementPerCycle;
             }
             else
             {
+                // Post cut-off: no sick leave for first 4 months
                 var qualifiesFrom = employee.HireDate.AddMonths(4);
 
                 if (asAtDate.Date < qualifiesFrom.Date)
@@ -237,7 +244,9 @@ namespace WebApp.Server.Services.Leave
                     };
                 }
 
+                // Cycle starts from hire date for post cut-off employees
                 cycleStart = employee.HireDate.Date;
+                totalEntitlement = sickEntitlementPerCycle;
             }
 
             if (asAtDate.Date < cycleStart.Date)
@@ -251,6 +260,7 @@ namespace WebApp.Server.Services.Leave
                 };
             }
 
+            // Work out which 3‑year cycle we're in (kept as originally, you can simplify if you want)
             var yearsSinceStart = asAtDate.Year - cycleStart.Year;
 
             if (asAtDate.Month < cycleStart.Month ||
@@ -267,7 +277,10 @@ namespace WebApp.Server.Services.Leave
             var currentCycleStart = cycleStart.AddYears(cycleIndex * cycleLengthYears);
             var currentCycleEnd = currentCycleStart.AddYears(cycleLengthYears);
 
-            var totalEntitlement = sickEntitlementPerCycle;
+            // Total entitlement for current cycle:
+            //  - pre cut-off: opening balance (or default) for *this* cycle
+            //  - post cut-off: fixed 30 per cycle
+            var cycleEntitlement = totalEntitlement;
 
             var taken = await _context.LeaveRecords
                 .Where(r => r.EmployeeId == employeeId
@@ -278,16 +291,17 @@ namespace WebApp.Server.Services.Leave
                             && r.StartDate.Date < currentCycleEnd.Date)
                 .SumAsync(r => r.DaysTaken);
 
-            var remaining = totalEntitlement - taken;
+            var remaining = cycleEntitlement - taken;
 
             return new LeaveBalanceSummaryDto
             {
                 LeaveTypeName = leaveType.Name,
-                TotalEntitlement = totalEntitlement,
+                TotalEntitlement = cycleEntitlement,
                 Taken = taken,
                 Remaining = remaining
             };
         }
+
 
         private async Task<LeaveBalanceSummaryDto> GetUnpaidLeaveSummaryAsync(
             int employeeId,
