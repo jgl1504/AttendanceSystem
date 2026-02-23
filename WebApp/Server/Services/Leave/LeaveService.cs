@@ -304,25 +304,31 @@ namespace WebApp.Server.Services.Leave
 
 
         private async Task<LeaveBalanceSummaryDto> GetUnpaidLeaveSummaryAsync(
-            int employeeId,
-            LeaveType leaveType,
-            DateTime asAtDate)
+      int employeeId,
+      LeaveType leaveType,
+      DateTime asAtDate)
         {
-            var taken = await _context.LeaveRecords
+            // Work out the month we are interested in, based on asAtDate
+            var monthStart = new DateTime(asAtDate.Year, asAtDate.Month, 1);
+            var monthEndExclusive = monthStart.AddMonths(1);
+
+            var takenThisMonth = await _context.LeaveRecords
                 .Where(r => r.EmployeeId == employeeId
                             && r.LeaveTypeId == leaveType.Id
                             && r.Status == LeaveStatus.Approved
-                            && r.StartDate.Date <= asAtDate.Date)
+                            && r.StartDate >= monthStart
+                            && r.StartDate < monthEndExclusive)
                 .SumAsync(r => r.DaysTaken);
 
             return new LeaveBalanceSummaryDto
             {
                 LeaveTypeName = leaveType.Name,
                 TotalEntitlement = 0m,
-                Taken = taken,
-                Remaining = 0m
+                Taken = takenThisMonth,   // for reporting only; no yearly accumulation
+                Remaining = takenThisMonth
             };
         }
+
 
         private Task<decimal> GetTakenLeaveAsync(int employeeId, Guid leaveTypeId, DateTime asAtDate)
         {
