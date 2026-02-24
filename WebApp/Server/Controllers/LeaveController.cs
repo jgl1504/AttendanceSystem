@@ -183,6 +183,17 @@ public class LeaveController : ControllerBase
         return Ok(data);
     }
 
+    // POST api/leave/change-portion/10
+    [HttpPost("change-portion/{id:int}")]
+    public async Task<ActionResult> ChangePortion(int id, [FromBody] LeavePortion newPortion)
+    {
+        var ok = await _leaveRequestService.ChangePortionAsync(id, newPortion);
+        if (!ok) return BadRequest(new { message = "Unable to change portion." });
+        return Ok();
+    }
+
+
+
     // Excel export using the SAME data and filters as payroll-matrix
     // GET api/leave/payroll-matrix/export?year=2026&month=3&companyId=1&departmentId=2&employeeId=5
     [HttpGet("payroll-matrix/export")]

@@ -41,7 +41,14 @@ else
                     <td>@r.StartDate.ToString("yyyy-MM-dd")</td>
                     <td>@r.EndDate.ToString("yyyy-MM-dd")</td>
                     <td>@r.DaysTaken</td>
-                    <td>@r.Portion</td>
+                    <td>
+                        <select class="form-select form-select-sm"
+                                value="@((int)r.Portion)"
+                                @onchange="e => ChangePortion(r, e)">
+                            <option value="1">Full day</option>
+                            <option value="2">Half day</option>
+                        </select>
+                    </td>
                     <td>
                         <select class="form-select form-select-sm"
                                 @onchange="e => ChangeType(r, e)">
@@ -142,6 +149,43 @@ else
             await JS.InvokeVoidAsync("alert", "Failed to load leave balance for this request.");
         }
     }
+
+    private async Task ChangePortion(LeaveRecordDto record, ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var portionInt))
+            return;
+
+        var newPortion = (LeavePortion)portionInt;
+
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Change portion to {newPortion}?");
+        if (!ok) return;
+
+        var response = await Http.PostAsJsonAsync($"api/leave/change-portion/{record.Id}", newPortion);
+        if (!response.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("alert", "Failed to change portion.");
+            return;
+        }
+
+        // Reload this employee's records and pick the updated one so DaysTaken is correct
+        var allForEmployee =
+            await Http.GetFromJsonAsync<List<LeaveRecordDto>>($"api/leave/employee/{record.EmployeeId}")
+            ?? new List<LeaveRecordDto>();
+
+        var updated = allForEmployee.FirstOrDefault(x => x.Id == record.Id);
+        if (updated is not null)
+        {
+            record.Portion = updated.Portion;
+            record.DaysTaken = updated.DaysTaken;
+        }
+        else
+        {
+            record.Portion = newPortion; // fallback
+        }
+
+        StateHasChanged();
+    }
+
 
     private async Task ChangeType(LeaveRecordDto record, ChangeEventArgs e)
     {

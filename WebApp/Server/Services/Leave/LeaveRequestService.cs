@@ -277,6 +277,37 @@ namespace WebApp.Server.Services.Leave
             return days;
         }
 
+        public async Task<bool> ChangePortionAsync(int leaveRecordId, LeavePortion newPortion)
+        {
+            var record = await _context.LeaveRecords
+                .FirstOrDefaultAsync(r => r.Id == leaveRecordId);
+
+            if (record == null || record.Status != LeaveStatus.Pending)
+                return false;
+
+            record.Portion = newPortion;
+
+            var workingDays = CalculateWorkingDays(record.StartDate, record.EndDate);
+
+            decimal daysTaken;
+            if (newPortion == LeavePortion.HalfDay)
+            {
+                daysTaken = workingDays <= 0 ? 0.5m : workingDays * 0.5m;
+            }
+            else // LeavePortion.FullDay
+            {
+                daysTaken = workingDays <= 0 ? 1.0m : workingDays;
+            }
+
+            record.DaysTaken = daysTaken;
+
+            _context.LeaveRecords.Update(record);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+
+
         // NEW: Get leave records for payroll report (approved only, for a date range)
         public async Task<List<PayrollLeaveDetailDto>> GetLeaveRecordsForPeriodAsync(
             DateTime from,
