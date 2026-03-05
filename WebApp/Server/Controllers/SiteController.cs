@@ -49,12 +49,26 @@ public class SitesController : ControllerBase
         return NoContent();
     }
 
+    // DELETE with "in use" handling
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var ok = await _service.DeleteAsync(id);
-        if (!ok) return NotFound();
+        // Let the service tell us what happened
+        var result = await _service.DeleteAsync(id);
 
-        return NoContent();
+        // Suggestion for service return:
+        // 0 = not found, 1 = deleted, 2 = in use / cannot delete
+        switch (result)
+        {
+            case 1:
+                return NoContent();
+
+            case 2:
+                // 409 Conflict is a good fit for "cannot delete due to existing links"
+                return Conflict("Cannot delete this site because it is linked to other records.");
+
+            default:
+                return NotFound();
+        }
     }
 }

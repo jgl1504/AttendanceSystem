@@ -16,9 +16,11 @@ public class SiteService
     public async Task<List<Site>> GetAllAsync()
     {
         return await _context.Sites
+            .Where(s => !s.IsDeleted)
             .OrderBy(s => s.Name)
             .ToListAsync();
     }
+
 
     public async Task<List<Site>> GetActiveAsync()
     {
@@ -36,7 +38,6 @@ public class SiteService
 
     public async Task<Site> CreateAsync(Site site)
     {
-        // Ensure new ID
         if (site.Id == Guid.Empty)
             site.Id = Guid.NewGuid();
 
@@ -65,19 +66,23 @@ public class SiteService
         return true;
     }
 
-    public async Task<bool> DeleteAsync(Guid id)
+    /// <summary>
+    /// 0 = not found
+    /// 1 = deleted (soft delete)
+    /// </summary>
+    public async Task<int> DeleteAsync(Guid id)
     {
         var site = await _context.Sites
             .FirstOrDefaultAsync(s => s.Id == id);
 
         if (site is null)
-            return false;
+            return 0;
 
-        // Soft delete to keep history
+        // Simple soft delete, no FK checks
         site.IsDeleted = true;
         site.IsActive = false;
 
         await _context.SaveChangesAsync();
-        return true;
+        return 1;
     }
 }

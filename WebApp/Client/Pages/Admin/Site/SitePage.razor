@@ -2,6 +2,7 @@
 
 @using WebApp.Shared.Model
 @inject HttpClient Http
+@inject IJSRuntime JS
 
 <PageTitle>Sites</PageTitle>
 
@@ -79,9 +80,17 @@ else
 
     <h4>Existing Sites</h4>
 
-    @if (sites is null || !sites.Any())
+    <div class="mb-2">
+        <input class="form-control form-control-sm"
+               placeholder="Filter by name..."
+               @bind="SearchText"
+               @bind:event="oninput" />
+    </div>
+
+
+    @if (filteredSites is null || !filteredSites.Any())
     {
-        <p class="text-muted">No sites configured yet.</p>
+        <p class="text-muted">No sites found.</p>
     }
     else
     {
@@ -94,11 +103,11 @@ else
                     <th>Longitude</th>
                     <th>Active</th>
                     <th>Preferred Map</th>
-                    <th style="width: 150px;"></th>
+                    <th style="width: 220px;"></th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var s in sites)
+                @foreach (var s in filteredSites)
                 {
                     <tr class="@(!s.IsActive ? "table-secondary" : null)">
                         <td>@s.Name</td>
@@ -113,16 +122,20 @@ else
                             </button>
                             @if (s.IsActive)
                             {
-                                <button class="btn btn-sm btn-outline-warning" @onclick="() => Deactivate(s)">
+                                <button class="btn btn-sm btn-outline-warning me-1" @onclick="() => Deactivate(s)">
                                     Deactivate
                                 </button>
                             }
                             else
                             {
-                                <button class="btn btn-sm btn-outline-success" @onclick="() => Activate(s)">
+                                <button class="btn btn-sm btn-outline-success me-1" @onclick="() => Activate(s)">
                                     Activate
                                 </button>
                             }
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="() => DeleteSite(s)">
+                                Delete
+                            </button>
                         </td>
                     </tr>
                 }
@@ -133,8 +146,10 @@ else
 
 @code {
     private List<Site> sites = new();
+    private List<Site> filteredSites = new();
     private Site editSite = new Site { Id = Guid.Empty, IsActive = true };  // Force empty ID
     private bool isLoading = true;
+    private string? searchText;
 
     protected override async Task OnInitializedAsync()
     {
@@ -145,7 +160,27 @@ else
     {
         isLoading = true;
         sites = await Http.GetFromJsonAsync<List<Site>>("api/sites") ?? new List<Site>();
+        ApplyFilter();
         isLoading = false;
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            filteredSites = sites
+                .OrderBy(s => s.Name)
+                .ToList();
+        }
+        else
+        {
+            var term = searchText.Trim();
+            filteredSites = sites
+                .Where(s => !string.IsNullOrEmpty(s.Name) &&
+                            s.Name.StartsWith(term, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(s => s.Name)
+                .ToList();
+        }
     }
 
     private void StartEdit(Site s)
@@ -200,5 +235,34 @@ else
         await Http.PutAsJsonAsync($"api/sites/{s.Id}", s);
         await LoadSites();
     }
-}
 
+    private async Task DeleteSite(Site s)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", $"Delete site '{s.Name}'?");
+        if (!confirm)
+            return;
+
+        var response = await Http.DeleteAsync($"api/sites/{s.Id}");
+        if (!response.IsSuccessStatusCode)
+        {
+            // Backend should return 409 or 400 if FK constraint / linked usage exists
+            var message = await response.Content.ReadAsStringAsync();
+            await JS.InvokeVoidAsync("alert", string.IsNullOrWhiteSpace(message)
+                ? "Unable to delete site. It may be in use."
+                : message);
+            return;
+        }
+
+        await LoadSites();
+    }
+
+    private string? SearchText
+    {
+        get => searchText;
+        set
+        {
+            searchText = value;
+            ApplyFilter();
+        }
+    }
+}
