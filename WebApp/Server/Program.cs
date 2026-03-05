@@ -7,6 +7,7 @@ using WebApp.Server.Configuration;
 using WebApp.Server.Data;
 using WebApp.Server.Services;
 using WebApp.Server.Services.Attendance;
+using WebApp.Server.Services.Background;
 using WebApp.Server.Services.Departments;
 using WebApp.Server.Services.Employees;
 using WebApp.Server.Services.Leave;
@@ -75,6 +76,11 @@ builder.Services.AddScoped<LeaveRequestService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<LeaveDebugService>();
 builder.Services.AddScoped<CompanyService>();
+builder.Services.AddScoped<SmtpEmailSenderService>();
+builder.Services.AddHostedService<DailyAbsentEmailService>();
+builder.Services.AddScoped<DailyAbsentReporter>();
+
+
 
 
 builder.Services.Configure<LeaveAttachmentsOptions>(
