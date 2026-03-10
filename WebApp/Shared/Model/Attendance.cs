@@ -46,5 +46,9 @@
 
         // When the decision was made
         public DateTime? OvertimeDecisionTime { get; set; }
+        
+        // Manually approved overtime hours (overrides calculated OT if set)
+        public double? ApprovedOvertimeHours { get; set; }
+
     }
 }

@@ -8,5 +8,6 @@
         public double OvertimeApproved { get; set; }
         public double OvertimeSundayApproved { get; set; }
         public double DriverApproved { get; set; }
+        public double BreakdownApproved { get; set; } // new
     }
 }

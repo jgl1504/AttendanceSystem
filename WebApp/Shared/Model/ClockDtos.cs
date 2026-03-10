@@ -66,6 +66,9 @@
         public bool HasOvertime => (OvertimeHours ?? 0) > 0;
         public bool IsOvertimeApproved => OvertimeStatus == OvertimeStatus.Approved;
         public bool IsOvertimePending => OvertimeStatus == OvertimeStatus.Pending;
+        public double? ApprovedOvertimeHours { get; set; }   // manual override
+        public double? ApprovedBreakdownHours { get; set; }  // calculated approved
+
     }
 
 

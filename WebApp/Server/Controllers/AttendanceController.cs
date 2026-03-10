@@ -86,13 +86,15 @@ public class AttendanceController : ControllerBase
     // Unified overtime decision DTO (approve/deny + location/note + approver)
     public class OvertimeDecisionDto
     {
-        public int Id { get; set; }                 // AttendanceRecord.Id
+        public int Id { get; set; }
         public OvertimeStatus OvertimeStatus { get; set; }
         public string? OvertimeLocation { get; set; }
         public string? OvertimeNote { get; set; }
-
-        // Chosen approver employee id from the dropdown (nullable for reopen)
         public int? OvertimeApprovedByEmployeeId { get; set; }
+
+        // Optional manual override: if set, this is the approved OT hours
+        // regardless of what was calculated. Useful for Breakdown entries.
+        public double? ApprovedOvertimeHours { get; set; }
     }
 
     [HttpPost("overtime-decision")]
@@ -103,11 +105,13 @@ public class AttendanceController : ControllerBase
             dto.OvertimeStatus,
             dto.OvertimeLocation,
             dto.OvertimeNote,
-            dto.OvertimeApprovedByEmployeeId); // pass nullable
+            dto.OvertimeApprovedByEmployeeId,
+            dto.ApprovedOvertimeHours); // new
 
         if (!ok) return NotFound();
         return NoContent();
     }
+
 
     // Internal helper that uses the AttendanceService + current approver
     private async Task<bool> DecideOvertimeInternalAsync(
@@ -115,13 +119,21 @@ public class AttendanceController : ControllerBase
         OvertimeStatus status,
         string? location,
         string? note,
-        int? approverEmployeeId)
+        int? approverEmployeeId,
+        double? approvedOvertimeHours)
     {
         var record = await _attendanceService.GetRecordForDecisionAsync(attendanceId);
         if (record is null) return false;
 
-        if ((record.HoursWorked ?? 0) <= 0 || record.ClockOutTime is null)
-            return false;
+        // For Breakdown: allow approval even without ClockOut hours
+        // For Normal/Driver: still require hours worked and clock out
+        bool isBreakdown = record.WorkCategory == WorkCategory.Breakdown;
+
+        if (!isBreakdown)
+        {
+            if ((record.HoursWorked ?? 0) <= 0 || record.ClockOutTime is null)
+                return false;
+        }
 
         record.OvertimeStatus = status;
         record.OvertimeLocation = location;
@@ -129,18 +141,21 @@ public class AttendanceController : ControllerBase
 
         if (status == OvertimeStatus.Approved || status == OvertimeStatus.Denied)
         {
-            // Must have a valid approver to satisfy FK
             if (approverEmployeeId is null || approverEmployeeId <= 0)
                 return false;
 
             record.OvertimeApprovedByEmployeeId = approverEmployeeId;
             record.OvertimeDecisionTime = DateTime.UtcNow;
+
+            // Save manually entered approved hours if provided
+            record.ApprovedOvertimeHours = approvedOvertimeHours;
         }
         else
         {
-            // Pending / None (reopen) – clear approver + decision time
+            // Pending / None (reopen) - clear everything
             record.OvertimeApprovedByEmployeeId = null;
             record.OvertimeDecisionTime = null;
+            record.ApprovedOvertimeHours = null;
         }
 
         await _attendanceService.SaveChangesAsync();
@@ -280,14 +295,14 @@ public class AttendanceController : ControllerBase
 
     [HttpGet("payroll-hours")]
     public async Task<ActionResult<IEnumerable<PayrollHoursRowDto>>> GetPayrollHours(
-       [FromQuery] DateTime from,
-       [FromQuery] DateTime to,
-       [FromQuery] int? employeeId,
-       [FromQuery] int? departmentId,
-       [FromQuery] int? companyId)
+    [FromQuery] DateTime from,
+    [FromQuery] DateTime to,
+    [FromQuery] int? employeeId,
+    [FromQuery] int? departmentId,
+    [FromQuery] int? companyId)
     {
         var fromDate = from.Date;
-        var toDateExclusive = to.Date.AddDays(1); // inclusive upper bound
+        var toDateExclusive = to.Date.AddDays(1);
 
         var records = await _attendanceService.GetByDateRangeAsync(
             fromDate,
@@ -296,15 +311,13 @@ public class AttendanceController : ControllerBase
             departmentId,
             companyId);
 
-        // records: IEnumerable<AttendanceListItemDto>
-
         var grouped = records
             .GroupBy(r => r.EmployeeName)
             .Select(g => new PayrollHoursRowDto
             {
                 EmployeeName = g.Key,
 
-                // Normal hours for the period (NormalHours field)
+                // Normal hours for the period
                 NormalHours = g.Sum(r => r.NormalHours ?? 0d),
 
                 // Approved weekday overtime
@@ -317,16 +330,23 @@ public class AttendanceController : ControllerBase
                     .Where(r => r.OvertimeStatus == OvertimeStatus.Approved)
                     .Sum(r => r.SundayPublicOvertimeHours ?? 0d),
 
-                // Approved driver overtime (segments marked as Driver)
+                // Approved driver hours
                 DriverApproved = g
                     .Where(r => r.OvertimeStatus == OvertimeStatus.Approved
                              && r.WorkCategory == WorkCategory.Driver)
-                    .Sum(r => r.DriverHours ?? 0d)
+                    .Sum(r => r.DriverHours ?? 0d),
+
+                // Approved breakdown hours - prefer manual override if set
+                BreakdownApproved = g
+                    .Where(r => r.OvertimeStatus == OvertimeStatus.Approved
+                             && r.WorkCategory == WorkCategory.Breakdown)
+                    .Sum(r => r.ApprovedOvertimeHours ?? r.BreakdownHours ?? 0d)
             })
             .ToList();
 
         return Ok(grouped);
     }
+
 
     [HttpGet("leave-monthly-report")]
     public async Task<ActionResult<IEnumerable<LeaveMonthlyReportRowDto>>> GetLeaveMonthlyReport(
